@@ -131,8 +131,32 @@ function piVersion(): string {
   return "unknown";
 }
 
+// Baked-in "how to write a Piwork extension/skill" guide (see Dockerfile COPY).
+const PIWORK_SKILLS_DIR = "/opt/pi-host/skills";
+
+// Always-on base extension: gives every session a /piwork-reload command so newly
+// authored/installed extensions, skills and connectors go live WITHOUT ending the
+// session. Injected via the resource loader, so it needs no package install.
+const piworkBaseExtension = (pi: {
+  registerCommand: (name: string, opts: { description: string; handler: (args: string, ctx: { ui: { notify: (m: string, t?: string) => void }; reload: () => Promise<void> }) => Promise<void> }) => void;
+}) => {
+  pi.registerCommand("piwork-reload", {
+    description: "Reload Piwork skills, extensions & connectors without ending the session",
+    handler: async (_args, ctx) => {
+      ctx.ui.notify("Reloading resources…", "info");
+      await ctx.reload();
+    },
+  });
+};
+
 const createRuntime: CreateAgentSessionRuntimeFactory = async ({ cwd, sessionManager, sessionStartEvent }) => {
-  const services = await createAgentSessionServices({ cwd });
+  const services = await createAgentSessionServices({
+    cwd,
+    resourceLoaderOptions: {
+      extensionFactories: [piworkBaseExtension as never],
+      ...(fs.existsSync(PIWORK_SKILLS_DIR) ? { additionalSkillPaths: [PIWORK_SKILLS_DIR] } : {}),
+    },
+  });
   return {
     ...(await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent })),
     services,

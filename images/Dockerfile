@@ -19,6 +19,8 @@ RUN npm install --omit=dev --no-audit --no-fund
 
 # pi-host source (run directly via Node 24 native TypeScript type-stripping).
 COPY packages/pi-host/src ./src
+# Baked-in Piwork skills (always available: the "how to write an extension" guide).
+COPY packages/pi-host/skills ./skills
 
 # The mounted project lives here.
 WORKDIR /workspace

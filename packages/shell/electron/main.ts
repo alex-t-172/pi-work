@@ -314,9 +314,16 @@ ipcMain.handle("piwork:removePackage", async (_e, workspace: string, source: str
   return { ok: r.ok, error: r.ok ? undefined : r.output.trim().split("\n").slice(-3).join("\n") };
 });
 ipcMain.handle("piwork:reloadSession", async () => {
-  if (!lastAgent) return { ok: false, error: "no active session" };
-  // Restart the session container resuming the most recent session so new resources load.
-  return startSessionFor(lastAgent.workspace, "recent");
+  // Prefer a LIVE reload via the always-on /piwork-reload command (ctx.reload()) — no
+  // container restart, conversation preserved. Fall back to a restart if no live session.
+  if (bridge) {
+    log("reload: /piwork-reload (live)");
+    bridge.send({ type: "prompt", message: "/piwork-reload" });
+    setTimeout(() => bridge?.send({ id: "get_commands", type: "get_commands" }), 1500); // refresh autocomplete
+    return { ok: true };
+  }
+  if (lastAgent) return startSessionFor(lastAgent.workspace, "recent");
+  return { ok: false, error: "no active session" };
 });
 ipcMain.handle("piwork:getConfig", () => getConfig());
 ipcMain.handle("piwork:setConfig", (_e, patch: Record<string, unknown>) => setConfig(patch));
