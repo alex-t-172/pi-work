@@ -11,6 +11,7 @@ import type { ChatItem, ConnectorServer, LoginState, PackageItem, ResourceItem, 
 const SUITE_PRESETS = [
   { name: "Checkpoint", source: "/opt/piwork-suite/piwork-checkpoint", dir: "piwork-checkpoint", desc: "Git auto-commit before each turn (safety net)" },
   { name: "Connectors", source: "/opt/piwork-suite/piwork-connectors", dir: "piwork-connectors", desc: "Engine for MCP connectors (Slack, Notion, …) — configure via the 🔌 button" },
+  { name: "Artifacts", source: "/opt/piwork-suite/piwork-artifacts", dir: "piwork-artifacts", desc: "Auto-preview files written to .artifacts/ (HTML/Markdown/text)" },
 ];
 
 // MCP connector presets: each yields a stdio server + one or more secret env fields.
