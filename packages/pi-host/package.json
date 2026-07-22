@@ -1,0 +1,13 @@
+{
+  "name": "@piwork/pi-host",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Node process that embeds the Pi SDK inside the container and bridges it to the shell over JSONL stdio.",
+  "bin": {
+    "pi-host": "./src/index.ts"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "0.78.1"
+  }
+}

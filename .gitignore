@@ -1,0 +1,10 @@
+node_modules/
+dist/
+*.tsbuildinfo
+*.log
+.DS_Store
+
+# ephemeral spike/smoke/delivery workspaces (created under the repo so Rancher shares them)
+.spike-tmp-*/
+.smoke-tmp-*/
+.deliv-tmp-*/

@@ -1,0 +1,15 @@
+{
+  "name": "piwork-connectors",
+  "version": "0.0.0",
+  "description": "Piwork Suite: connect MCP servers (Slack, Notion, …) and expose their tools to the agent. Configured from the Piwork UI.",
+  "keywords": ["pi-package", "piwork"],
+  "pi": {
+    "extensions": ["./extensions"]
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  }
+}

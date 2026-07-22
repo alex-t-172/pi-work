@@ -1,0 +1,19 @@
+{
+  "name": "@piwork/bridge-protocol",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared JSONL bridge contract between the Piwork shell (host) and pi-host (container): strict LF-only framing plus the versioned message envelope, built on Pi's RPC protocol shapes.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./framing": "./src/framing.ts"
+  },
+  "scripts": {
+    "test": "node --test 'src/**/*.test.ts'"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "0.78.1"
+  }
+}

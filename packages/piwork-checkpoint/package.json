@@ -1,0 +1,12 @@
+{
+  "name": "piwork-checkpoint",
+  "version": "0.0.0",
+  "description": "Piwork Suite: git auto-checkpoint before each agent turn (a safety net). Demonstrates the Piwork extension pattern.",
+  "keywords": ["pi-package", "piwork"],
+  "pi": {
+    "extensions": ["./extensions"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "name": "@piwork/shell",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Piwork Electron shell: renders Pi's event stream and serialized ctx.ui intents as a native GUI.",
+  "main": "dist/electron/main.js",
+  "scripts": {
+    "dev": "concurrently -k -n vite,electron -c cyan,magenta \"vite\" \"npm:dev:electron\"",
+    "dev:electron": "node scripts/dev-electron.mjs",
+    "build:renderer": "vite build",
+    "build:main": "esbuild electron/main.ts electron/preload.ts --bundle --platform=node --format=cjs --external:electron --outdir=dist/electron",
+    "build": "npm run build:renderer && npm run build:main",
+    "start": "npm run build && electron .",
+    "test:bridge": "node --test 'electron/**/*.test.ts'"
+  },
+  "dependencies": {
+    "marked": "^12.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "concurrently": "^9.0.0",
+    "electron": "^33.0.0",
+    "esbuild": "^0.24.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.6.0",
+    "vite": "^5.4.0"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "piwork",
+  "private": true,
+  "version": "0.0.0",
+  "description": "A minimal GUI desktop shell for the Pi coding agent, plus a removable Suite of extensions.",
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "spike:a": "node scripts/spike-a.mjs"
+  }
+}
