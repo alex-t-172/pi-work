@@ -323,10 +323,25 @@ export function useBridge() {
     setLauncherSessions(null);
   }, []);
 
+  // Clear everything scoped to a single session so nothing bleeds across folders.
+  const resetSessionState = useCallback(() => {
+    setItems([]);
+    setStreaming(false);
+    setStatuses({});
+    setWidgets({ above: {}, below: {} });
+    setDialog(null);
+    setArtifacts({});
+    setArtifactsOpen(false);
+    setLastArtifactKey(null);
+    setSessionTree(null);
+    setTreeOpen(false);
+    setRewinding(false);
+  }, []);
+
   const startWith = useCallback(async (folder: string, session?: string) => {
     setActiveFolder(folder);
     setConnection("starting");
-    setItems([]);
+    resetSessionState();
     const res = await window.piwork.startSession(folder, session);
     if (!res.ok) {
       setConnection("error");
@@ -334,15 +349,15 @@ export function useBridge() {
     } else {
       void refreshRecent();
     }
-  }, [pushToast, refreshRecent]);
+  }, [pushToast, refreshRecent, resetSessionState]);
 
   // End the session (kill the sandbox), then choose where to land.
   const endSession = useCallback(async () => {
     await window.piwork.stopSession();
     setConnection("idle");
-    setItems([]);
+    resetSessionState();
     void refreshRecent();
-  }, [refreshRecent]);
+  }, [refreshRecent, resetSessionState]);
   const endToHome = useCallback(async () => {
     await endSession();
     backToFolders();
