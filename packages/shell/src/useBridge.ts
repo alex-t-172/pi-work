@@ -46,6 +46,11 @@ export function useBridge() {
   const nextId = () => `it-${++idc.current}`;
   const assistantId = useRef<string | null>(null);
   const toolIds = useRef<Map<string, string>>(new Map());
+  const rewindInFlight = useRef(false); // a rewind was requested, awaiting the fresh tree (= success)
+  const pendingPrefill = useRef<string | null>(null);
+  const streamingRef = useRef(false);
+
+  useEffect(() => { streamingRef.current = streaming; }, [streaming]);
 
   const pushToast = useCallback((message: string, level: Toast["level"]) => {
     const id = nextId();
@@ -250,7 +255,17 @@ export function useBridge() {
         case "sessionTree":
           setSessionTree({ tree: (p.tree as TreeNode[]) ?? [], leaf: (p.leaf as string | null) ?? null });
           setTreeOpen(true);
-          setRewinding(false); // a fresh tree means the rewind (if any) finished
+          if (rewindInFlight.current) {
+            // pi-host only re-emits the tree on a SUCCESSFUL rewind (not on cancel), so
+            // this is where we know it worked — apply the human-message prefill now.
+            if (pendingPrefill.current != null) {
+              const text = pendingPrefill.current;
+              setInjectedText((prev) => ({ text, nonce: (prev?.nonce ?? 0) + 1 }));
+            }
+            rewindInFlight.current = false;
+            pendingPrefill.current = null;
+            setRewinding(false);
+          }
           break;
         case "artifact": {
           const key = String(p.key ?? "default");
@@ -387,12 +402,15 @@ export function useBridge() {
 
   const openSessionTree = useCallback(() => window.piwork.send({ id: "tree", type: "prompt", message: "/piwork-tree" }), []);
   const rewindTo = useCallback((id: string, prefill?: string) => {
+    if (streamingRef.current) return; // no rewinding mid-turn (UI is disabled too)
+    rewindInFlight.current = true;
+    pendingPrefill.current = prefill ?? null; // applied only once the rewind succeeds (see sessionTree handler)
     setRewinding(true);
-    // Human-message rewind lands before the message with its text ready to edit.
-    if (prefill != null) setInjectedText((prev) => ({ text: prefill, nonce: (prev?.nonce ?? 0) + 1 }));
     window.piwork.send({ id: "rewind", type: "prompt", message: `/piwork-rewind ${id}` });
     setTimeout(() => window.piwork.send({ id: "history", type: "get_messages" }), 900); // refresh chat after rewind
-    setTimeout(() => setRewinding(false), 6000); // safety clear if no fresh tree arrives
+    setTimeout(() => { // safety: if no fresh tree arrives (e.g. rewind cancelled), don't hang/prefill
+      if (rewindInFlight.current) { rewindInFlight.current = false; pendingPrefill.current = null; setRewinding(false); }
+    }, 6000);
   }, []);
 
   const abort = useCallback(() => window.piwork.send({ id: "abort", type: "abort" }), []);

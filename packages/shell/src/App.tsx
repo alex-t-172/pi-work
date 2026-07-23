@@ -67,6 +67,7 @@ export default function App() {
             artifactCount={Object.keys(b.artifacts).length}
             onArtifacts={() => b.setArtifactsOpen((v: boolean) => !v)}
             onTree={b.openSessionTree}
+            treeBusy={b.streaming}
           />
           <StatusBar statuses={b.statuses} streaming={b.streaming} onAbort={b.abort} />
           <Widgets lines={b.widgets.above} placement="above" />
@@ -118,7 +119,7 @@ export default function App() {
       {c.open && <ConnectorsModal c={c} inSession={inSession} onClose={c.close} />}
       {b.dialog && <DialogModal dialog={b.dialog} onRespond={b.respondDialog} />}
       {inSession && b.treeOpen && b.sessionTree && (
-        <SessionTreePanel data={b.sessionTree} rewinding={b.rewinding} onRewind={b.rewindTo} onClose={() => b.setTreeOpen(false)} />
+        <SessionTreePanel data={b.sessionTree} rewinding={b.rewinding} busy={b.streaming} onRewind={b.rewindTo} onClose={() => b.setTreeOpen(false)} />
       )}
       {showDebug && <DebugDrawer debugLog={b.debugLog} stderrLog={b.stderrLog} onClose={() => setShowDebug(false)} />}
       {b.login.active && (
@@ -300,7 +301,7 @@ function artifactSrcDoc(body: string): string {
 // Visual session tree. Renders only message nodes (recursing through non-message
 // entries), indented by conversation depth; the current leaf is highlighted; clicking a
 // node rewinds the conversation to that point.
-function SessionTreeRows(props: { nodes: TreeNode[]; leaf: string | null; depth: number; onRewind: (id: string, prefill?: string) => void }): React.ReactElement {
+function SessionTreeRows(props: { nodes: TreeNode[]; leaf: string | null; depth: number; disabled: boolean; onRewind: (id: string, prefill?: string) => void }): React.ReactElement {
   return (
     <>
       {props.nodes.map((n) => {
@@ -309,7 +310,7 @@ function SessionTreeRows(props: { nodes: TreeNode[]; leaf: string | null; depth:
         const isMsg = n.type === "message" && (n.role === "user" || (n.role === "assistant" && n.preview.trim() !== ""));
         if (!isMsg) {
           // Skip this entry but keep its children at the same depth.
-          return <SessionTreeRows key={n.id} nodes={n.children} leaf={props.leaf} depth={props.depth} onRewind={props.onRewind} />;
+          return <SessionTreeRows key={n.id} nodes={n.children} leaf={props.leaf} depth={props.depth} disabled={props.disabled} onRewind={props.onRewind} />;
         }
         const current = n.id === props.leaf;
         return (
@@ -317,6 +318,7 @@ function SessionTreeRows(props: { nodes: TreeNode[]; leaf: string | null; depth:
             <button
               className={`tree-node ${current ? "current" : ""}`}
               style={{ paddingLeft: 8 + props.depth * 16 }}
+              disabled={props.disabled || current}
               title={current ? "Current position" : n.role === "user" ? "Rewind to before this message (editable)" : "Rewind to just after this reply"}
               onClick={() => props.onRewind(n.id, n.role === "user" ? (n.text ?? n.preview) : undefined)}
             >
@@ -325,7 +327,7 @@ function SessionTreeRows(props: { nodes: TreeNode[]; leaf: string | null; depth:
               {current && <span className="tree-here">● here</span>}
             </button>
             {n.children.length > 0 && (
-              <SessionTreeRows nodes={n.children} leaf={props.leaf} depth={props.depth + 1} onRewind={props.onRewind} />
+              <SessionTreeRows nodes={n.children} leaf={props.leaf} depth={props.depth + 1} disabled={props.disabled} onRewind={props.onRewind} />
             )}
           </div>
         );
@@ -334,7 +336,8 @@ function SessionTreeRows(props: { nodes: TreeNode[]; leaf: string | null; depth:
   );
 }
 
-function SessionTreePanel(props: { data: { tree: TreeNode[]; leaf: string | null }; rewinding: boolean; onRewind: (id: string, prefill?: string) => void; onClose: () => void }) {
+function SessionTreePanel(props: { data: { tree: TreeNode[]; leaf: string | null }; rewinding: boolean; busy: boolean; onRewind: (id: string, prefill?: string) => void; onClose: () => void }) {
+  const disabled = props.rewinding || props.busy;
   return (
     <div className="artifacts-drawer tree-drawer">
       <header>
@@ -343,12 +346,21 @@ function SessionTreePanel(props: { data: { tree: TreeNode[]; leaf: string | null
         <div className="spacer" />
         <button onClick={props.onClose}>Close</button>
       </header>
-      <div className="tree-hint">Jump back to any point. Click one of your messages to edit &amp; resend from there, or a reply to continue after it.</div>
-      <div className={`tree-body ${props.rewinding ? "busy" : ""}`}>
-        {props.data.tree.length === 0 ? (
-          <div className="muted" style={{ padding: 12 }}>No history yet.</div>
-        ) : (
-          <SessionTreeRows nodes={props.data.tree} leaf={props.data.leaf} depth={0} onRewind={props.onRewind} />
+      <div className="tree-hint">
+        {props.busy
+          ? "Agent is working — rewind is available when it's idle."
+          : "Jump back to any point. Click one of your messages to edit & resend from there, or a reply to continue after it."}
+      </div>
+      <div className="tree-body-wrap">
+        <div className={`tree-body ${disabled ? "busy" : ""}`}>
+          {props.data.tree.length === 0 ? (
+            <div className="muted" style={{ padding: 12 }}>No history yet.</div>
+          ) : (
+            <SessionTreeRows nodes={props.data.tree} leaf={props.data.leaf} depth={0} disabled={disabled} onRewind={props.onRewind} />
+          )}
+        </div>
+        {props.rewinding && (
+          <div className="tree-overlay"><span className="spinner" /> Rewinding…</div>
         )}
       </div>
     </div>
@@ -442,6 +454,7 @@ function TopBar(props: {
   artifactCount: number;
   onArtifacts: () => void;
   onTree: () => void;
+  treeBusy: boolean;
 }) {
   const value = props.currentModel ? `${props.currentModel.provider}/${props.currentModel.id}` : "";
   return (
@@ -467,7 +480,7 @@ function TopBar(props: {
           ))}
         </select>
       )}
-      <button className="secondary" onClick={props.onTree} title="Rewind — jump back to an earlier point">⏪ Rewind</button>
+      <button className="secondary" onClick={props.onTree} disabled={props.treeBusy} title={props.treeBusy ? "Rewind is available when the agent is idle" : "Rewind — jump back to an earlier point"}>⏪ Rewind</button>
       <button onClick={props.onEndSessions} title="End the sandbox and return to this folder's sessions">End · Sessions</button>
       <button onClick={props.onEndHome} title="End the sandbox and return to the folders home">End · Home</button>
       <button className="secondary" onClick={props.onResources} title="Manage skills, plugins & extensions">🧩</button>
