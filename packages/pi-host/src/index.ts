@@ -137,14 +137,54 @@ const PIWORK_SKILLS_DIR = "/opt/pi-host/skills";
 // Always-on base extension: gives every session a /piwork-reload command so newly
 // authored/installed extensions, skills and connectors go live WITHOUT ending the
 // session. Injected via the resource loader, so it needs no package install.
+// Trim a SessionTreeNode into a compact serializable shape for the shell's tree view.
+function trimTreeNode(node: any): any {
+  const e = node?.entry ?? {};
+  const msg = e.type === "message" ? e.message : undefined;
+  const text = msg && Array.isArray(msg.content)
+    ? msg.content.filter((c: any) => c?.type === "text").map((c: any) => c.text).join(" ").trim()
+    : "";
+  return {
+    id: e.id,
+    type: e.type,
+    role: msg?.role,
+    label: node?.label,
+    preview: text.slice(0, 140),
+    children: Array.isArray(node?.children) ? node.children.map(trimTreeNode) : [],
+  };
+}
+
 const piworkBaseExtension = (pi: {
-  registerCommand: (name: string, opts: { description: string; handler: (args: string, ctx: { ui: { notify: (m: string, t?: string) => void }; reload: () => Promise<void> }) => Promise<void> }) => void;
+  registerCommand: (name: string, opts: { description: string; handler: (args: string, ctx: any) => Promise<void> }) => void;
 }) => {
   pi.registerCommand("piwork-reload", {
     description: "Reload Piwork skills, extensions & connectors without ending the session",
     handler: async (_args, ctx) => {
       ctx.ui.notify("Reloading resources…", "info");
       await ctx.reload();
+    },
+  });
+
+  const emitTree = (ctx: any) => {
+    const tree = ctx.sessionManager.getTree().map(trimTreeNode);
+    ctx.ui.showSessionTree({ tree, leaf: ctx.sessionManager.getLeafId() });
+  };
+
+  // Show the session's branch tree in the shell.
+  pi.registerCommand("piwork-tree", {
+    description: "Show the session's branch tree (for the visual navigator)",
+    handler: async (_args, ctx) => emitTree(ctx),
+  });
+
+  // Rewind the conversation to an earlier entry (creates/moves to that branch).
+  pi.registerCommand("piwork-rewind", {
+    description: "Rewind the conversation to an earlier point by entry id",
+    handler: async (args, ctx) => {
+      const id = args.trim();
+      if (!id) return;
+      const result = await ctx.navigateTree(id);
+      ctx.ui.notify(result?.cancelled ? "Rewind cancelled" : "Rewound to an earlier point", result?.cancelled ? "warning" : "info");
+      emitTree(ctx);
     },
   });
 };
@@ -210,6 +250,8 @@ async function main() {
         markdown: opts?.markdown != null ? String(opts.markdown) : undefined,
       }),
     clearArtifact: (key?: string) => emitUiIntent("artifact", { key: String(key ?? "default"), clear: true }),
+    // Session-tree graph for the visual navigator.
+    showSessionTree: (data: { tree: unknown; leaf: string | null }) => emitUiIntent("sessionTree", { tree: data.tree, leaf: data.leaf }),
   });
   // Patch bindExtensions on the AgentSession PROTOTYPE so it also covers sessions created
   // by replacement (new/fork/switch), which runRpcMode rebinds automatically.

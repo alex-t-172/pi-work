@@ -36,6 +36,15 @@ export interface PiworkApi {
   loginInput(id: string, value: string): void;
 }
 
+export interface TreeNode {
+  id: string;
+  type: string;
+  role?: string;
+  label?: string;
+  preview: string;
+  children: TreeNode[];
+}
+
 export interface ConnectorServer {
   id: string;
   label?: string;

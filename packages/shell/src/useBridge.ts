@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ChatItem, Connection, LoginState, ModelInfo, SessionMeta, Toast, UiDialog } from "./types.ts";
+import type { ChatItem, Connection, LoginState, ModelInfo, SessionMeta, Toast, TreeNode, UiDialog } from "./types.ts";
 
 // Mirrors piwork-ui's PIWORK_INTENT_SENTINEL. Extensions ride richer intents on `notify`
 // until they become first-class (once we own the shim). Kept in sync by convention.
@@ -32,6 +32,8 @@ export function useBridge() {
   const [artifacts, setArtifacts] = useState<Record<string, { title?: string; html?: string; markdown?: string }>>({});
   const [artifactsOpen, setArtifactsOpen] = useState(false);
   const [commands, setCommands] = useState<Array<{ name: string; description?: string; source?: string }>>([]);
+  const [sessionTree, setSessionTree] = useState<{ tree: TreeNode[]; leaf: string | null } | null>(null);
+  const [treeOpen, setTreeOpen] = useState(false);
   const [recentFolders, setRecentFolders] = useState<string[]>([]);
   const [launcherFolder, setLauncherFolder] = useState<string | null>(null);
   const [launcherSessions, setLauncherSessions] = useState<SessionMeta[] | null>(null);
@@ -77,6 +79,19 @@ export function useBridge() {
     if (id) setItems((prev) => prev.map((it) => (it.id === id ? { ...it, streaming: false } : it)));
   }, []);
 
+  // Rebuild the chat from message history (on resume, and after a tree rewind).
+  const loadMessages = useCallback((messages: any[]) => {
+    assistantId.current = null;
+    const items: ChatItem[] = [];
+    for (const m of messages ?? []) {
+      const parts = Array.isArray(m?.content) ? m.content : [];
+      const text = parts.filter((p: any) => p?.type === "text").map((p: any) => p.text).join("");
+      if (m?.role === "user" && text.trim()) items.push({ id: nextId(), role: "user", text });
+      else if (m?.role === "assistant" && text.trim()) items.push({ id: nextId(), role: "assistant", text });
+    }
+    if (items.length) setItems(items);
+  }, []);
+
   useEffect(() => {
     const unsub = window.piwork.onMessage(({ channel, payload }) => {
       const p = payload as Record<string, any>;
@@ -99,6 +114,7 @@ export function useBridge() {
           window.piwork.send({ id: "get_state", type: "get_state" });
           window.piwork.send({ id: "get_available_models", type: "get_available_models" });
           window.piwork.send({ id: "get_commands", type: "get_commands" });
+          window.piwork.send({ id: "history", type: "get_messages" }); // show history on resume
           break;
 
         case "event":
@@ -115,6 +131,7 @@ export function useBridge() {
 
         case "response":
           if (p.command === "get_commands" && p.success) setCommands(p.data?.commands ?? []);
+          else if (p.command === "get_messages" && p.success) loadMessages(p.data?.messages ?? []);
           else if (p.command === "get_available_models" && p.success) setModels(p.data?.models ?? []);
           else if (p.command === "set_model" && p.success) setCurrentModel(p.data ?? null);
           else if (p.command === "get_state" && p.success) {
@@ -224,6 +241,10 @@ export function useBridge() {
         case "openExternal": // first-class intent (Piwork owns the shim)
           if (typeof p.url === "string") window.piwork.openExternal(p.url);
           break;
+        case "sessionTree":
+          setSessionTree({ tree: (p.tree as TreeNode[]) ?? [], leaf: (p.leaf as string | null) ?? null });
+          setTreeOpen(true);
+          break;
         case "artifact": {
           const key = String(p.key ?? "default");
           const empty = p.clear || (p.html == null && p.markdown == null);
@@ -269,7 +290,7 @@ export function useBridge() {
           break;
       }
     }
-  }, [appendText, appendThinking, finalizeAssistant, pushToast]);
+  }, [appendText, appendThinking, finalizeAssistant, pushToast, loadMessages]);
 
   // ── launcher actions ─────────────────────────────────────────────────────────
   const refreshRecent = useCallback(async () => {
@@ -342,6 +363,12 @@ export function useBridge() {
     [streaming],
   );
 
+  const openSessionTree = useCallback(() => window.piwork.send({ id: "tree", type: "prompt", message: "/piwork-tree" }), []);
+  const rewindTo = useCallback((id: string) => {
+    window.piwork.send({ id: "rewind", type: "prompt", message: `/piwork-rewind ${id}` });
+    setTimeout(() => window.piwork.send({ id: "history", type: "get_messages" }), 900); // refresh chat after rewind
+  }, []);
+
   const abort = useCallback(() => window.piwork.send({ id: "abort", type: "abort" }), []);
   const respondDialog = useCallback((resp: Record<string, unknown>) => {
     window.piwork.respondUi(resp);
@@ -379,6 +406,7 @@ export function useBridge() {
     connection, hello, items, streaming, statuses, widgets, dialog, toasts, models, currentModel, stderrLog, debugLog, login,
     recentFolders, launcherFolder, launcherSessions, activeFolder,
     artifacts, artifactsOpen, setArtifactsOpen, commands,
+    sessionTree, treeOpen, setTreeOpen, openSessionTree, rewindTo,
     submit, abort, respondDialog, setModel,
     startLogin, chooseProvider, submitLoginInput, closeLogin,
     refreshRecent, pickFolder, selectFolder, backToFolders, startWith, endToHome, endToSessions,

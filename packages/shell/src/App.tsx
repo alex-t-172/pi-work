@@ -53,6 +53,7 @@ export default function App() {
             onConnectors={() => b.activeFolder && c.openFor("project", b.activeFolder)}
             artifactCount={Object.keys(b.artifacts).length}
             onArtifacts={() => b.setArtifactsOpen((v: boolean) => !v)}
+            onTree={b.openSessionTree}
           />
           <StatusBar statuses={b.statuses} streaming={b.streaming} onAbort={b.abort} />
           <Widgets lines={b.widgets.above} placement="above" />
@@ -85,6 +86,9 @@ export default function App() {
       {r.open && <ResourcesModal r={r} inSession={inSession} onClose={r.close} />}
       {c.open && <ConnectorsModal c={c} inSession={inSession} onClose={c.close} />}
       {b.dialog && <DialogModal dialog={b.dialog} onRespond={b.respondDialog} />}
+      {inSession && b.treeOpen && b.sessionTree && (
+        <SessionTreePanel data={b.sessionTree} onRewind={b.rewindTo} onClose={() => b.setTreeOpen(false)} />
+      )}
       {inSession && b.artifactsOpen && <ArtifactsPanel artifacts={b.artifacts} onClose={() => b.setArtifactsOpen(false)} />}
       {showDebug && <DebugDrawer debugLog={b.debugLog} stderrLog={b.stderrLog} onClose={() => setShowDebug(false)} />}
       {b.login.active && (
@@ -263,6 +267,60 @@ function artifactSrcDoc(body: string): string {
   return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><style>body{font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#16181d;background:#fff;margin:14px}pre{background:#f0f1f4;padding:10px;border-radius:6px;overflow:auto}</style></head><body>${body}</body></html>`;
 }
 
+// Visual session tree. Renders only message nodes (recursing through non-message
+// entries), indented by conversation depth; the current leaf is highlighted; clicking a
+// node rewinds the conversation to that point.
+function SessionTreeRows(props: { nodes: TreeNode[]; leaf: string | null; depth: number; onRewind: (id: string) => void }): React.ReactElement {
+  return (
+    <>
+      {props.nodes.map((n) => {
+        const isMsg = n.type === "message" && (n.role === "user" || n.role === "assistant");
+        if (!isMsg) {
+          // Skip non-message entries but keep their children at the same depth.
+          return <SessionTreeRows key={n.id} nodes={n.children} leaf={props.leaf} depth={props.depth} onRewind={props.onRewind} />;
+        }
+        const current = n.id === props.leaf;
+        return (
+          <div key={n.id}>
+            <button
+              className={`tree-node ${current ? "current" : ""}`}
+              style={{ paddingLeft: 8 + props.depth * 16 }}
+              title={current ? "Current position" : "Rewind here"}
+              onClick={() => props.onRewind(n.id)}
+            >
+              <span className="tree-role">{n.role === "user" ? "You" : "Pi"}</span>
+              <span className="tree-preview">{n.preview || "(empty)"}</span>
+              {current && <span className="tree-here">● here</span>}
+            </button>
+            {n.children.length > 0 && (
+              <SessionTreeRows nodes={n.children} leaf={props.leaf} depth={props.depth + 1} onRewind={props.onRewind} />
+            )}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+function SessionTreePanel(props: { data: { tree: TreeNode[]; leaf: string | null }; onRewind: (id: string) => void; onClose: () => void }) {
+  return (
+    <div className="artifacts-drawer tree-drawer">
+      <header>
+        <strong>Session tree</strong>
+        <div className="spacer" />
+        <button onClick={props.onClose}>Close</button>
+      </header>
+      <div className="tree-body">
+        {props.data.tree.length === 0 ? (
+          <div className="muted" style={{ padding: 12 }}>No history yet.</div>
+        ) : (
+          <SessionTreeRows nodes={props.data.tree} leaf={props.data.leaf} depth={0} onRewind={props.onRewind} />
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ArtifactsPanel(props: { artifacts: Record<string, { title?: string; html?: string; markdown?: string }>; onClose: () => void }) {
   const entries = Object.entries(props.artifacts);
   return (
@@ -327,6 +385,7 @@ function TopBar(props: {
   onConnectors: () => void;
   artifactCount: number;
   onArtifacts: () => void;
+  onTree: () => void;
 }) {
   const value = props.currentModel ? `${props.currentModel.provider}/${props.currentModel.id}` : "";
   return (
@@ -352,6 +411,7 @@ function TopBar(props: {
           ))}
         </select>
       )}
+      <button className="secondary" onClick={props.onTree} title="Session tree (branches & rewind)">🌳</button>
       <button onClick={props.onEndSessions} title="End the sandbox and return to this folder's sessions">End · Sessions</button>
       <button onClick={props.onEndHome} title="End the sandbox and return to the folders home">End · Home</button>
       <button className="secondary" onClick={props.onResources} title="Manage skills, plugins & extensions">🧩</button>
