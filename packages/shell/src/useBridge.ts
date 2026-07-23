@@ -35,6 +35,7 @@ export function useBridge() {
   const [commands, setCommands] = useState<Array<{ name: string; description?: string; source?: string }>>([]);
   const [sessionTree, setSessionTree] = useState<{ tree: TreeNode[]; leaf: string | null } | null>(null);
   const [treeOpen, setTreeOpen] = useState(false);
+  const [rewinding, setRewinding] = useState(false);
   const [injectedText, setInjectedText] = useState<{ text: string; nonce: number } | null>(null);
   const [recentFolders, setRecentFolders] = useState<string[]>([]);
   const [launcherFolder, setLauncherFolder] = useState<string | null>(null);
@@ -249,6 +250,7 @@ export function useBridge() {
         case "sessionTree":
           setSessionTree({ tree: (p.tree as TreeNode[]) ?? [], leaf: (p.leaf as string | null) ?? null });
           setTreeOpen(true);
+          setRewinding(false); // a fresh tree means the rewind (if any) finished
           break;
         case "artifact": {
           const key = String(p.key ?? "default");
@@ -370,10 +372,12 @@ export function useBridge() {
 
   const openSessionTree = useCallback(() => window.piwork.send({ id: "tree", type: "prompt", message: "/piwork-tree" }), []);
   const rewindTo = useCallback((id: string, prefill?: string) => {
+    setRewinding(true);
     // Human-message rewind lands before the message with its text ready to edit.
     if (prefill != null) setInjectedText((prev) => ({ text: prefill, nonce: (prev?.nonce ?? 0) + 1 }));
     window.piwork.send({ id: "rewind", type: "prompt", message: `/piwork-rewind ${id}` });
     setTimeout(() => window.piwork.send({ id: "history", type: "get_messages" }), 900); // refresh chat after rewind
+    setTimeout(() => setRewinding(false), 6000); // safety clear if no fresh tree arrives
   }, []);
 
   const abort = useCallback(() => window.piwork.send({ id: "abort", type: "abort" }), []);
@@ -413,7 +417,7 @@ export function useBridge() {
     connection, hello, items, streaming, statuses, widgets, dialog, toasts, models, currentModel, stderrLog, debugLog, login,
     recentFolders, launcherFolder, launcherSessions, activeFolder,
     artifacts, artifactsOpen, setArtifactsOpen, lastArtifactKey, commands,
-    sessionTree, treeOpen, setTreeOpen, openSessionTree, rewindTo, injectedText,
+    sessionTree, treeOpen, setTreeOpen, openSessionTree, rewindTo, rewinding, injectedText,
     submit, abort, respondDialog, setModel,
     startLogin, chooseProvider, submitLoginInput, closeLogin,
     refreshRecent, pickFolder, selectFolder, backToFolders, startWith, endToHome, endToSessions,

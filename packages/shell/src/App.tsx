@@ -100,7 +100,7 @@ export default function App() {
       {c.open && <ConnectorsModal c={c} inSession={inSession} onClose={c.close} />}
       {b.dialog && <DialogModal dialog={b.dialog} onRespond={b.respondDialog} />}
       {inSession && b.treeOpen && b.sessionTree && (
-        <SessionTreePanel data={b.sessionTree} onRewind={b.rewindTo} onClose={() => b.setTreeOpen(false)} />
+        <SessionTreePanel data={b.sessionTree} rewinding={b.rewinding} onRewind={b.rewindTo} onClose={() => b.setTreeOpen(false)} />
       )}
       {showDebug && <DebugDrawer debugLog={b.debugLog} stderrLog={b.stderrLog} onClose={() => setShowDebug(false)} />}
       {b.login.active && (
@@ -316,15 +316,17 @@ function SessionTreeRows(props: { nodes: TreeNode[]; leaf: string | null; depth:
   );
 }
 
-function SessionTreePanel(props: { data: { tree: TreeNode[]; leaf: string | null }; onRewind: (id: string, prefill?: string) => void; onClose: () => void }) {
+function SessionTreePanel(props: { data: { tree: TreeNode[]; leaf: string | null }; rewinding: boolean; onRewind: (id: string, prefill?: string) => void; onClose: () => void }) {
   return (
     <div className="artifacts-drawer tree-drawer">
       <header>
-        <strong>Session tree</strong>
+        <strong>Rewind</strong>
+        {props.rewinding && <span className="rewind-status"><span className="spinner" /> rewinding…</span>}
         <div className="spacer" />
         <button onClick={props.onClose}>Close</button>
       </header>
-      <div className="tree-body">
+      <div className="tree-hint">Jump back to any point. Click one of your messages to edit &amp; resend from there, or a reply to continue after it.</div>
+      <div className={`tree-body ${props.rewinding ? "busy" : ""}`}>
         {props.data.tree.length === 0 ? (
           <div className="muted" style={{ padding: 12 }}>No history yet.</div>
         ) : (
@@ -445,7 +447,7 @@ function TopBar(props: {
           ))}
         </select>
       )}
-      <button className="secondary" onClick={props.onTree} title="Session tree (branches & rewind)">🌳</button>
+      <button className="secondary" onClick={props.onTree} title="Rewind — jump back to an earlier point">⏪ Rewind</button>
       <button onClick={props.onEndSessions} title="End the sandbox and return to this folder's sessions">End · Sessions</button>
       <button onClick={props.onEndHome} title="End the sandbox and return to the folders home">End · Home</button>
       <button className="secondary" onClick={props.onResources} title="Manage skills, plugins & extensions">🧩</button>
