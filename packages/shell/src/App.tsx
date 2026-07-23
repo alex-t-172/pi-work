@@ -206,7 +206,7 @@ function Launcher(props: {
           </div>
           <h3>History</h3>
           {props.sessions === null ? (
-            <p className="muted">Loading sessions…</p>
+            <Loading label="Loading sessions…" />
           ) : props.sessions.length === 0 ? (
             <p className="muted">No past sessions in this folder yet.</p>
           ) : (
@@ -742,6 +742,10 @@ function Toasts(props: { toasts: { id: string; message: string; level: string }[
   );
 }
 
+function Loading({ label }: { label: string }) {
+  return <div className="loading-row"><span className="spinner" /> {label}</div>;
+}
+
 function ScopeBadge({ scope }: { scope?: string }) {
   if (!scope) return null;
   const label = scope === "user" ? "global" : scope;
@@ -761,16 +765,23 @@ function ResourcesModal(props: { r: ReturnType<typeof useResources>; inSession: 
   const managed = (items: ResourceItem[]) => items.filter((i) => i.scope === managedScope);
   const inherited = (items: ResourceItem[]) => (isGlobal ? [] : items.filter((i) => i.scope === "user"));
 
+  const loading = r.data === null;
   return (
     <div className="modal-backdrop" onClick={props.onClose}>
       <div className="modal resources-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-title">{isGlobal ? "Global extensions & skills" : "Project extensions & skills"}</div>
-        <div className="muted" style={{ marginBottom: 12 }}>
-          {isGlobal ? "Available in every project" : `${basename(r.workspace)} — this project only`}
+        <div className="modal-topbar">
+          <div>
+            <div className="modal-title">{isGlobal ? "Global extensions & skills" : "Project extensions & skills"}</div>
+            <div className="muted">{isGlobal ? "Available in every project" : `${basename(r.workspace)} — this project only`}</div>
+          </div>
+          <div className="spacer" />
+          {r.dirty && props.inSession && <button className="primary" onClick={r.reload}>Reload to apply</button>}
+          <button onClick={props.onClose}>Done</button>
         </div>
 
+        <div className="modal-scroll">
         {r.error && <div className="res-error">{r.error}</div>}
-        {r.busy && <div className="muted">{r.busy}</div>}
+        {r.busy && <Loading label={r.busy} />}
 
         <div className="theme-section">Add a preset</div>
         <div className="preset-list">
@@ -792,31 +803,37 @@ function ResourcesModal(props: { r: ReturnType<typeof useResources>; inSession: 
           </button>
         </div>
 
-        {managedPkgs.length > 0 && (
+        {loading ? (
+          <Loading label="Loading installed resources…" />
+        ) : (
           <>
-            <div className="theme-section">Installed plugins</div>
-            {managedPkgs.map((p: PackageItem) => (
-              <div key={`${p.scope}:${p.source}`} className="res-row">
-                <div className="res-main"><span className="res-name">{basename(p.source)}</span><span className="res-desc">{p.source}</span></div>
-                <button className="secondary" onClick={() => r.remove(p.source, managedScope === "user" ? "global" : "project")}>Remove</button>
-              </div>
-            ))}
-          </>
-        )}
+            {managedPkgs.length > 0 && (
+              <>
+                <div className="theme-section">Installed plugins</div>
+                {managedPkgs.map((p: PackageItem) => (
+                  <div key={`${p.scope}:${p.source}`} className="res-row">
+                    <div className="res-main"><span className="res-name">{basename(p.source)}</span><span className="res-desc">{p.source}</span></div>
+                    <button className="secondary" onClick={() => r.remove(p.source, managedScope === "user" ? "global" : "project")}>Remove</button>
+                  </div>
+                ))}
+              </>
+            )}
 
-        <ResourceGroup title="Extensions" items={managed(d.extensions)} render={(e) => e.commands?.length ? `commands: ${e.commands.join(", ")}` : ""} />
-        <ResourceGroup title="Skills" items={managed(d.skills)} render={(s) => s.description ?? ""} />
-        <ResourceGroup title="Prompts" items={managed(d.prompts)} render={(p) => p.description ?? ""} />
+            <ResourceGroup title="Extensions" items={managed(d.extensions)} render={(e) => e.commands?.length ? `commands: ${e.commands.join(", ")}` : ""} />
+            <ResourceGroup title="Skills" items={managed(d.skills)} render={(s) => s.description ?? ""} />
+            <ResourceGroup title="Prompts" items={managed(d.prompts)} render={(p) => p.description ?? ""} />
 
-        {!isGlobal && (inheritedPkgs.length + inherited(d.extensions).length + inherited(d.skills).length > 0) && (
-          <>
-            <div className="theme-section">Inherited from global <span className="muted">(manage in Home)</span></div>
-            {inheritedPkgs.map((p) => (
-              <div key={`g:${p.source}`} className="res-row"><div className="res-main"><span className="res-name">{basename(p.source)}</span></div><ScopeBadge scope="user" /></div>
-            ))}
-            {[...inherited(d.extensions), ...inherited(d.skills)].map((i) => (
-              <div key={`g:${i.name}:${i.path ?? ""}`} className="res-row"><div className="res-main"><span className="res-name">{i.name}</span><span className="res-desc">{i.description ?? (i.commands?.length ? `commands: ${i.commands.join(", ")}` : "")}</span></div><ScopeBadge scope="user" /></div>
-            ))}
+            {!isGlobal && (inheritedPkgs.length + inherited(d.extensions).length + inherited(d.skills).length > 0) && (
+              <>
+                <div className="theme-section">Inherited from global <span className="muted">(manage in Home)</span></div>
+                {inheritedPkgs.map((p) => (
+                  <div key={`g:${p.source}`} className="res-row"><div className="res-main"><span className="res-name">{basename(p.source)}</span></div><ScopeBadge scope="user" /></div>
+                ))}
+                {[...inherited(d.extensions), ...inherited(d.skills)].map((i) => (
+                  <div key={`g:${i.name}:${i.path ?? ""}`} className="res-row"><div className="res-main"><span className="res-name">{i.name}</span><span className="res-desc">{i.description ?? (i.commands?.length ? `commands: ${i.commands.join(", ")}` : "")}</span></div><ScopeBadge scope="user" /></div>
+                ))}
+              </>
+            )}
           </>
         )}
 
@@ -829,10 +846,6 @@ function ResourcesModal(props: { r: ReturnType<typeof useResources>; inSession: 
             </label>
           </>
         )}
-
-        <div className="modal-actions">
-          {r.dirty && props.inSession && <button className="primary" onClick={r.reload}>Reload session to apply</button>}
-          <button onClick={props.onClose}>Done</button>
         </div>
       </div>
     </div>
@@ -937,14 +950,20 @@ function ConnectorsModal(props: { c: ReturnType<typeof useConnectors>; inSession
 
   return (
     <div className="modal-backdrop" onClick={props.onClose}>
-      <div className="modal resources-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-title">{isGlobal ? "Global connectors" : "Project connectors"}</div>
-        <div className="muted" style={{ marginBottom: 12 }}>
-          {isGlobal ? "MCP servers available in every project" : `${basename(c.folder ?? "")} — this project only`}
+      <div className="modal connectors-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-topbar">
+          <div>
+            <div className="modal-title">{isGlobal ? "Global connectors" : "Project connectors"}</div>
+            <div className="muted">{isGlobal ? "MCP servers available in every project" : `${basename(c.folder ?? "")} — this project only`}</div>
+          </div>
+          <div className="spacer" />
+          {c.dirty && props.inSession && <button className="primary" onClick={c.reload}>Reload to apply</button>}
+          <button onClick={props.onClose}>Done</button>
         </div>
 
+        <div className="modal-scroll">
         {c.error && <div className="res-error">{c.error}</div>}
-        {c.busy && <div className="muted">{c.busy}</div>}
+        {c.busy && <Loading label={c.busy} />}
 
         {c.servers.length > 0 && (
           <>
@@ -996,10 +1015,6 @@ function ConnectorsModal(props: { c: ReturnType<typeof useConnectors>; inSession
             </div>
           </div>
         )}
-
-        <div className="modal-actions">
-          {c.dirty && props.inSession && <button className="primary" onClick={c.reload}>Reload session to apply</button>}
-          <button onClick={props.onClose}>Done</button>
         </div>
       </div>
     </div>
