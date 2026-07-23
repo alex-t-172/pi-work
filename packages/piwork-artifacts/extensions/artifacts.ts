@@ -40,6 +40,33 @@ function showFile(ui: Ui, full: string, name: string): void {
 }
 
 export default function (pi: ExtensionAPI) {
+  // A discoverable tool so the agent knows it can show the user rich output. (The
+  // .artifacts/ folder watcher below is a secondary path for tools that write files.)
+  pi.registerTool({
+    name: "show_artifact",
+    label: "Show artifact",
+    description:
+      "Display a document, report, table, chart, or preview to the user in a side panel (rendered HTML or Markdown). Use this to present formatted results the user should read or keep visible, instead of dumping large content into the chat.",
+    parameters: {
+      type: "object",
+      properties: {
+        title: { type: "string", description: "Short title for the panel." },
+        markdown: { type: "string", description: "Markdown content to render." },
+        html: { type: "string", description: "HTML content to render (alternative to markdown)." },
+      },
+      required: ["title"],
+    } as never,
+    execute: async (_toolCallId, params, _signal, _onUpdate, ctx) => {
+      const p = params as { title: string; markdown?: string; html?: string };
+      const ui = (ctx as { ui: { showArtifact?: (o: unknown) => void } }).ui;
+      if (typeof ui.showArtifact !== "function") {
+        return { content: [{ type: "text", text: "Artifacts need the Piwork shell." }], details: {} };
+      }
+      ui.showArtifact({ key: p.title || "artifact", title: p.title, html: p.html, markdown: p.markdown });
+      return { content: [{ type: "text", text: `Shown "${p.title}" in the artifacts panel.` }], details: {} };
+    },
+  });
+
   pi.on("session_start", (_event, ctx) => {
     if (poller) { clearInterval(poller); poller = undefined; }
     const ui = ctx.ui as unknown as Ui;

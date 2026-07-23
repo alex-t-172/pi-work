@@ -150,6 +150,7 @@ function trimTreeNode(node: any): any {
     role: msg?.role,
     label: node?.label,
     preview: text.slice(0, 140),
+    text: text.slice(0, 4000), // full-ish text so the shell can prefill on human-message rewind
     children: Array.isArray(node?.children) ? node.children.map(trimTreeNode) : [],
   };
 }
@@ -183,7 +184,14 @@ const piworkBaseExtension = (pi: {
       const id = args.trim();
       if (!id) return;
       const result = await ctx.navigateTree(id);
-      ctx.ui.notify(result?.cancelled ? "Rewind cancelled" : "Rewound to an earlier point", result?.cancelled ? "warning" : "info");
+      if (result?.cancelled) {
+        ctx.ui.notify("Rewind cancelled", "warning");
+        return;
+      }
+      // For a human message the shell prefills the composer locally from the tree node's
+      // text; navigateTree's editorText is unreliable in headless mode.
+      if (result?.editorText) ctx.ui.setEditorText(result.editorText);
+      ctx.ui.notify("Rewound", "info");
       emitTree(ctx);
     },
   });

@@ -42,6 +42,7 @@ export interface TreeNode {
   role?: string;
   label?: string;
   preview: string;
+  text?: string;
   children: TreeNode[];
 }
 

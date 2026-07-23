@@ -30,9 +30,9 @@ function userNodes(nodes, out = []) {
 }
 
 const b = new ContainerBridge();
-const seen = { trees: 0, firstUserCount: 0, rewound: false, msgCounts: [] };
+const seen = { trees: 0, firstUserCount: 0, rewound: false, msgCounts: [], editorText: null };
 let phase = 0;
-b.on("stderr", () => {});
+b.on("stderr", (c) => { if (String(c).includes("rewind")) process.stderr.write(`[c] ${c}`); });
 b.on("error", (e) => console.error("bridge error", e.message));
 b.on("hello", () => b.prompt('Reply with just "A".', { id: "p1" }));
 b.on("event", (e) => {
@@ -44,6 +44,7 @@ b.on("event", (e) => {
 b.on("response", (r) => { if (r.command === "get_messages" && r.success) seen.msgCounts.push((r.data?.messages ?? []).length); });
 b.on("ui_request", (r) => {
   if (r.method === "notify" && String(r.message ?? "").includes("Rewound")) seen.rewound = true;
+  if (r.method === "set_editor_text") { seen.editorText = String(r.text ?? ""); console.error(`editor prefilled: ${JSON.stringify(seen.editorText)}`); }
   if (r.method !== "sessionTree") return;
   seen.trees++;
   const users = userNodes(r.tree);
@@ -68,6 +69,7 @@ setTimeout(async () => {
   console.error(`rewind fired (navigateTree)      : ${seen.rewound ? "YES" : "no"}`);
   console.error(`second tree after rewind         : ${seen.trees >= 2 ? "YES" : "no"}`);
   console.error(`messages shrank after rewind     : ${before != null && after != null ? `${before} → ${after} ${after < before ? "YES" : "no"}` : "n/a"}`);
+  // (prefill on human rewind is now renderer-local from the tree node's text — verified in GUI)
   const pass = seen.firstUserCount >= 2 && seen.rewound && seen.trees >= 2 && before != null && after != null && after < before;
   console.error(`\nRESULT: ${pass ? "PASS ✅" : "FAIL ❌"}`);
   console.error("==========================================");

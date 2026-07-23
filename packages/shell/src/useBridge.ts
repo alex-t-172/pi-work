@@ -31,9 +31,11 @@ export function useBridge() {
   const [login, setLogin] = useState<LoginState>({ active: false });
   const [artifacts, setArtifacts] = useState<Record<string, { title?: string; html?: string; markdown?: string }>>({});
   const [artifactsOpen, setArtifactsOpen] = useState(false);
+  const [lastArtifactKey, setLastArtifactKey] = useState<string | null>(null);
   const [commands, setCommands] = useState<Array<{ name: string; description?: string; source?: string }>>([]);
   const [sessionTree, setSessionTree] = useState<{ tree: TreeNode[]; leaf: string | null } | null>(null);
   const [treeOpen, setTreeOpen] = useState(false);
+  const [injectedText, setInjectedText] = useState<{ text: string; nonce: number } | null>(null);
   const [recentFolders, setRecentFolders] = useState<string[]>([]);
   const [launcherFolder, setLauncherFolder] = useState<string | null>(null);
   const [launcherSessions, setLauncherSessions] = useState<SessionMeta[] | null>(null);
@@ -238,6 +240,9 @@ export function useBridge() {
         case "setTitle":
           if (typeof p.title === "string") document.title = p.title;
           break;
+        case "set_editor_text": // e.g. rewinding to a human message prefills its text
+          setInjectedText((prev) => ({ text: String(p.text ?? ""), nonce: (prev?.nonce ?? 0) + 1 }));
+          break;
         case "openExternal": // first-class intent (Piwork owns the shim)
           if (typeof p.url === "string") window.piwork.openExternal(p.url);
           break;
@@ -254,7 +259,7 @@ export function useBridge() {
             else next[key] = { title: p.title, html: p.html, markdown: p.markdown };
             return next;
           });
-          if (!empty) setArtifactsOpen(true); // auto-open the panel on a new artifact
+          if (!empty) { setArtifactsOpen(true); setLastArtifactKey(key); } // auto-open + select the new artifact
           break;
         }
       }
@@ -364,7 +369,9 @@ export function useBridge() {
   );
 
   const openSessionTree = useCallback(() => window.piwork.send({ id: "tree", type: "prompt", message: "/piwork-tree" }), []);
-  const rewindTo = useCallback((id: string) => {
+  const rewindTo = useCallback((id: string, prefill?: string) => {
+    // Human-message rewind lands before the message with its text ready to edit.
+    if (prefill != null) setInjectedText((prev) => ({ text: prefill, nonce: (prev?.nonce ?? 0) + 1 }));
     window.piwork.send({ id: "rewind", type: "prompt", message: `/piwork-rewind ${id}` });
     setTimeout(() => window.piwork.send({ id: "history", type: "get_messages" }), 900); // refresh chat after rewind
   }, []);
@@ -405,8 +412,8 @@ export function useBridge() {
   return {
     connection, hello, items, streaming, statuses, widgets, dialog, toasts, models, currentModel, stderrLog, debugLog, login,
     recentFolders, launcherFolder, launcherSessions, activeFolder,
-    artifacts, artifactsOpen, setArtifactsOpen, commands,
-    sessionTree, treeOpen, setTreeOpen, openSessionTree, rewindTo,
+    artifacts, artifactsOpen, setArtifactsOpen, lastArtifactKey, commands,
+    sessionTree, treeOpen, setTreeOpen, openSessionTree, rewindTo, injectedText,
     submit, abort, respondDialog, setModel,
     startLogin, chooseProvider, submitLoginInput, closeLogin,
     refreshRecent, pickFolder, selectFolder, backToFolders, startWith, endToHome, endToSessions,

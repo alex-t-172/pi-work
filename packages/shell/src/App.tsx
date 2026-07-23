@@ -32,12 +32,15 @@ export default function App() {
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const [showDebug, setShowDebug] = useState(false);
   const [showTheme, setShowTheme] = useState(false);
+  const [artWidth, setArtWidth] = useState(520);
   const inSession = b.connection === "connected" || b.connection === "starting";
+  const showArtifacts = inSession && b.artifactsOpen && Object.keys(b.artifacts).length > 0;
 
   return (
     <div className="app">
       {inSession ? (
-        <>
+        <div className="app-row">
+        <div className="app-col">
           <TopBar
             connection={b.connection}
             hello={b.hello}
@@ -59,8 +62,18 @@ export default function App() {
           <Widgets lines={b.widgets.above} placement="above" />
           <Chat items={b.items} connection={b.connection} />
           <Widgets lines={b.widgets.below} placement="below" />
-          <Composer taRef={composerRef} streaming={b.streaming} disabled={b.connection !== "connected"} onSubmit={b.submit} commands={b.commands} />
-        </>
+          <Composer taRef={composerRef} streaming={b.streaming} disabled={b.connection !== "connected"} onSubmit={b.submit} commands={b.commands} injected={b.injectedText} />
+        </div>
+        {showArtifacts && (
+          <ArtifactsPane
+            artifacts={b.artifacts}
+            lastKey={b.lastArtifactKey}
+            width={artWidth}
+            onWidth={setArtWidth}
+            onClose={() => b.setArtifactsOpen(false)}
+          />
+        )}
+        </div>
       ) : (
         <Launcher
           recentFolders={b.recentFolders}
@@ -89,7 +102,6 @@ export default function App() {
       {inSession && b.treeOpen && b.sessionTree && (
         <SessionTreePanel data={b.sessionTree} onRewind={b.rewindTo} onClose={() => b.setTreeOpen(false)} />
       )}
-      {inSession && b.artifactsOpen && <ArtifactsPanel artifacts={b.artifacts} onClose={() => b.setArtifactsOpen(false)} />}
       {showDebug && <DebugDrawer debugLog={b.debugLog} stderrLog={b.stderrLog} onClose={() => setShowDebug(false)} />}
       {b.login.active && (
         <LoginModal login={b.login} onChoose={b.chooseProvider} onSubmit={b.submitLoginInput} onClose={b.closeLogin} />
@@ -270,13 +282,15 @@ function artifactSrcDoc(body: string): string {
 // Visual session tree. Renders only message nodes (recursing through non-message
 // entries), indented by conversation depth; the current leaf is highlighted; clicking a
 // node rewinds the conversation to that point.
-function SessionTreeRows(props: { nodes: TreeNode[]; leaf: string | null; depth: number; onRewind: (id: string) => void }): React.ReactElement {
+function SessionTreeRows(props: { nodes: TreeNode[]; leaf: string | null; depth: number; onRewind: (id: string, prefill?: string) => void }): React.ReactElement {
   return (
     <>
       {props.nodes.map((n) => {
-        const isMsg = n.type === "message" && (n.role === "user" || n.role === "assistant");
+        // Rewind points are human messages + end-of-turn agent messages (with text).
+        // Skip intermediate tool-call entries (empty assistant) and non-message entries.
+        const isMsg = n.type === "message" && (n.role === "user" || (n.role === "assistant" && n.preview.trim() !== ""));
         if (!isMsg) {
-          // Skip non-message entries but keep their children at the same depth.
+          // Skip this entry but keep its children at the same depth.
           return <SessionTreeRows key={n.id} nodes={n.children} leaf={props.leaf} depth={props.depth} onRewind={props.onRewind} />;
         }
         const current = n.id === props.leaf;
@@ -285,8 +299,8 @@ function SessionTreeRows(props: { nodes: TreeNode[]; leaf: string | null; depth:
             <button
               className={`tree-node ${current ? "current" : ""}`}
               style={{ paddingLeft: 8 + props.depth * 16 }}
-              title={current ? "Current position" : "Rewind here"}
-              onClick={() => props.onRewind(n.id)}
+              title={current ? "Current position" : n.role === "user" ? "Rewind to before this message (editable)" : "Rewind to just after this reply"}
+              onClick={() => props.onRewind(n.id, n.role === "user" ? (n.text ?? n.preview) : undefined)}
             >
               <span className="tree-role">{n.role === "user" ? "You" : "Pi"}</span>
               <span className="tree-preview">{n.preview || "(empty)"}</span>
@@ -302,7 +316,7 @@ function SessionTreeRows(props: { nodes: TreeNode[]; leaf: string | null; depth:
   );
 }
 
-function SessionTreePanel(props: { data: { tree: TreeNode[]; leaf: string | null }; onRewind: (id: string) => void; onClose: () => void }) {
+function SessionTreePanel(props: { data: { tree: TreeNode[]; leaf: string | null }; onRewind: (id: string, prefill?: string) => void; onClose: () => void }) {
   return (
     <div className="artifacts-drawer tree-drawer">
       <header>
@@ -321,30 +335,50 @@ function SessionTreePanel(props: { data: { tree: TreeNode[]; leaf: string | null
   );
 }
 
-function ArtifactsPanel(props: { artifacts: Record<string, { title?: string; html?: string; markdown?: string }>; onClose: () => void }) {
-  const entries = Object.entries(props.artifacts);
+// A resizable right-hand pane (split, not overlay) that shows ONE artifact at a time
+// full-height, with a selector to switch between them — a file viewer, not a stack of boxes.
+function ArtifactsPane(props: {
+  artifacts: Record<string, { title?: string; html?: string; markdown?: string }>;
+  lastKey: string | null;
+  width: number;
+  onWidth: (w: number) => void;
+  onClose: () => void;
+}) {
+  const keys = Object.keys(props.artifacts);
+  const [sel, setSel] = useState<string>(props.lastKey ?? keys[keys.length - 1] ?? "");
+  // Follow newly-shown artifacts.
+  useEffect(() => { if (props.lastKey) setSel(props.lastKey); }, [props.lastKey]);
+  const active = props.artifacts[sel] ? sel : keys[keys.length - 1] ?? "";
+  const a = props.artifacts[active];
+  const body = a ? (a.html ?? (a.markdown ? (marked.parse(a.markdown) as string) : "")) : "";
+
+  const startResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const onMove = (ev: MouseEvent) => props.onWidth(Math.max(320, Math.min(window.innerWidth - 240, window.innerWidth - ev.clientX)));
+    const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
+
   return (
-    <div className="artifacts-drawer">
+    <div className="artifacts-pane" style={{ width: props.width }}>
+      <div className="art-resizer" onMouseDown={startResize} title="Drag to resize" />
       <header>
-        <strong>Artifacts</strong>
-        <div className="spacer" />
-        <button onClick={props.onClose}>Close</button>
-      </header>
-      <div className="artifacts-body">
-        {entries.length === 0 ? (
-          <div className="muted" style={{ padding: 12 }}>No artifacts yet.</div>
+        {keys.length > 1 ? (
+          <select value={active} onChange={(e) => setSel(e.target.value)} className="art-select">
+            {keys.map((k) => <option key={k} value={k}>{props.artifacts[k].title ?? k}</option>)}
+          </select>
         ) : (
-          entries.map(([key, a]) => {
-            const body = a.html ?? (a.markdown ? (marked.parse(a.markdown) as string) : "");
-            return (
-              <div key={key} className="artifact">
-                {a.title && <div className="artifact-title">{a.title}</div>}
-                <iframe className="artifact-frame" title={a.title ?? key} sandbox="allow-scripts" srcDoc={artifactSrcDoc(body)} />
-              </div>
-            );
-          })
+          <strong className="art-title">{a?.title ?? "Artifact"}</strong>
         )}
-      </div>
+        <div className="spacer" />
+        <button onClick={props.onClose} title="Close panel">✕</button>
+      </header>
+      {a ? (
+        <iframe className="art-frame" title={active} sandbox="allow-scripts" srcDoc={artifactSrcDoc(body)} />
+      ) : (
+        <div className="muted" style={{ padding: 16 }}>No artifact selected.</div>
+      )}
     </div>
   );
 }
@@ -566,10 +600,20 @@ const Composer = (function () {
     disabled: boolean;
     onSubmit: (text: string, mode: "auto" | "steer" | "followUp") => void;
     commands: Array<{ name: string; description?: string; source?: string }>;
+    injected: { text: string; nonce: number } | null;
   }) {
     const [text, setText] = useState("");
     const [sel, setSel] = useState(0);
     const [dismissed, setDismissed] = useState(false);
+
+    // Host-injected text (e.g. rewinding to a human message prefills it for editing).
+    useEffect(() => {
+      if (!props.injected) return;
+      setText(props.injected.text);
+      const t = props.taRef.current;
+      if (t) { t.focus(); t.style.height = "auto"; t.style.height = `${Math.min(t.scrollHeight, 160)}px`; }
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [props.injected?.nonce]);
 
     // Autocomplete when typing a slash command: "/" + partial name, no space yet.
     const match = /^\/(\S*)$/.exec(text);
