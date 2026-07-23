@@ -112,6 +112,9 @@ export interface ChatItem {
   /** For tool items. */
   toolName?: string;
   toolStatus?: "running" | "ok" | "error";
+  toolArgs?: Record<string, unknown>;
+  toolResult?: string;
+  toolDetails?: Record<string, unknown>;
   /** Assistant is still streaming. */
   streaming?: boolean;
 }

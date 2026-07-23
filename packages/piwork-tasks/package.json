@@ -1,0 +1,12 @@
+{
+  "name": "piwork-tasks",
+  "version": "0.0.0",
+  "description": "Piwork Suite: a task list the agent maintains, shown as a docked widget and persisted across compaction/reload.",
+  "keywords": ["pi-package", "piwork"],
+  "pi": {
+    "extensions": ["./extensions"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  }
+}

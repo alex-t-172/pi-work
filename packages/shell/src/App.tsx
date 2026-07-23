@@ -12,6 +12,8 @@ const SUITE_PRESETS = [
   { name: "Checkpoint", source: "/opt/piwork-suite/piwork-checkpoint", dir: "piwork-checkpoint", desc: "Git auto-commit before each turn (safety net)" },
   { name: "Connectors", source: "/opt/piwork-suite/piwork-connectors", dir: "piwork-connectors", desc: "Engine for MCP connectors (Slack, Notion, …) — configure via the 🔌 button" },
   { name: "Artifacts", source: "/opt/piwork-suite/piwork-artifacts", dir: "piwork-artifacts", desc: "Auto-preview files written to .artifacts/ (HTML/Markdown/text)" },
+  { name: "Tasks", source: "/opt/piwork-suite/piwork-tasks", dir: "piwork-tasks", desc: "A task list the agent maintains, shown as a docked widget" },
+  { name: "Ask", source: "/opt/piwork-suite/piwork-ask", dir: "piwork-ask", desc: "Lets the agent ask you a question (choice / yes-no / text) mid-turn" },
 ];
 
 // MCP connector presets: each yields a stdio server + one or more secret env fields.
@@ -423,19 +425,60 @@ function Chat(props: { items: ChatItem[]; connection: string }) {
   );
 }
 
+// Rich tool rendering (the "renderers" capability — shell-side, since Pi's TUI
+// renderCall/renderResult can't serialize). Summarizes args in the header and shows a
+// collapsible body (unified diff for edits, output for bash/others).
+function toolSummary(name?: string, args?: Record<string, unknown>): string {
+  if (!args) return "";
+  const a = args as Record<string, any>;
+  if (a.command) return String(a.command).split("\n")[0].slice(0, 120);
+  if (a.path) return String(a.path);
+  if (a.file) return String(a.file);
+  if (a.pattern) return String(a.pattern);
+  if (a.query) return String(a.query);
+  const firstStr = Object.values(a).find((v) => typeof v === "string");
+  return firstStr ? String(firstStr).slice(0, 120) : "";
+}
+
+function ToolMessage({ item }: { item: ChatItem }) {
+  const [open, setOpen] = useState(false);
+  const icon = item.toolStatus === "running" ? "⏳" : item.toolStatus === "error" ? "✗" : "✓";
+  const summary = toolSummary(item.toolName, item.toolArgs);
+  const patch = (item.toolDetails as any)?.patch as string | undefined;
+  const body = patch ?? item.toolResult ?? (item.toolArgs ? JSON.stringify(item.toolArgs, null, 2) : "");
+  const hasBody = Boolean(body && body.trim());
+  return (
+    <div className={`msg tool tool-${item.toolStatus}`}>
+      <button className="tool-head" disabled={!hasBody} onClick={() => setOpen((v) => !v)}>
+        <span className="tool-badge">{icon}</span>
+        <code className="tool-name">{item.toolName}</code>
+        {summary && <span className="tool-summary">{summary}</span>}
+        {hasBody && <span className="tool-caret">{open ? "▾" : "▸"}</span>}
+      </button>
+      {open && hasBody && (
+        patch ? <DiffView patch={patch} /> : <pre className="tool-body">{body.slice(0, 20000)}</pre>
+      )}
+    </div>
+  );
+}
+
+function DiffView({ patch }: { patch: string }) {
+  return (
+    <pre className="tool-body diff">
+      {patch.split("\n").slice(0, 400).map((line, i) => {
+        const cls = line.startsWith("+") && !line.startsWith("+++") ? "add" : line.startsWith("-") && !line.startsWith("---") ? "del" : line.startsWith("@@") ? "hunk" : "";
+        return <div key={i} className={`dl ${cls}`}>{line || " "}</div>;
+      })}
+    </pre>
+  );
+}
+
 function Message({ item }: { item: ChatItem }) {
   // Hooks must run unconditionally (before any early return).
   const bodyHtml = useMemo(() => (item.text ? (marked.parse(item.text) as string) : ""), [item.text]);
   const thinkingHtml = useMemo(() => (item.thinking ? (marked.parse(item.thinking) as string) : ""), [item.thinking]);
 
-  if (item.role === "tool") {
-    return (
-      <div className={`msg tool tool-${item.toolStatus}`}>
-        <span className="tool-badge">{item.toolStatus === "running" ? "⏳" : item.toolStatus === "error" ? "✗" : "✓"}</span>
-        <code>{item.toolName}</code>
-      </div>
-    );
-  }
+  if (item.role === "tool") return <ToolMessage item={item} />;
 
   return (
     <div className={`msg ${item.role} ${item.streaming ? "streaming" : ""}`}>

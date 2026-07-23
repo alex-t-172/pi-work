@@ -170,12 +170,14 @@ export function useBridge() {
         case "tool_execution_start": {
           const id = nextId();
           toolIds.current.set(String(p.toolCallId), id);
-          setItems((prev) => [...prev, { id, role: "tool", text: "", toolName: p.toolName, toolStatus: "running" }]);
+          setItems((prev) => [...prev, { id, role: "tool", text: "", toolName: p.toolName, toolStatus: "running", toolArgs: p.args }]);
           break;
         }
         case "tool_execution_end": {
           const id = toolIds.current.get(String(p.toolCallId));
-          if (id) setItems((prev) => prev.map((it) => (it.id === id ? { ...it, toolStatus: p.isError ? "error" : "ok" } : it)));
+          const result = p.result ?? {};
+          const resultText = Array.isArray(result.content) ? result.content.filter((c: any) => c?.type === "text").map((c: any) => c.text).join("") : undefined;
+          if (id) setItems((prev) => prev.map((it) => (it.id === id ? { ...it, toolStatus: p.isError ? "error" : "ok", toolResult: resultText, toolDetails: result.details } : it)));
           break;
         }
       }
