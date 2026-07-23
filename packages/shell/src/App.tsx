@@ -54,6 +54,7 @@ export default function App() {
             hello={b.hello}
             currentModel={b.currentModel}
             models={b.models}
+            globalMode={b.globalMode}
             onEndSessions={b.endToSessions}
             onEndHome={b.endToHome}
             onPickModel={b.setModel}
@@ -62,8 +63,8 @@ export default function App() {
             currentProvider={b.currentModel?.provider}
             onProviders={() => setShowProviders(true)}
             onTheme={() => setShowTheme(true)}
-            onResources={() => b.activeFolder && r.openFor("project", b.activeFolder)}
-            onConnectors={() => b.activeFolder && c.openFor("project", b.activeFolder)}
+            onResources={() => (b.globalMode ? r.openFor("global") : b.activeFolder && r.openFor("project", b.activeFolder))}
+            onConnectors={() => (b.globalMode ? c.openFor("global") : b.activeFolder && c.openFor("project", b.activeFolder))}
             artifactCount={Object.keys(b.artifacts).length}
             onArtifacts={() => b.setArtifactsOpen((v: boolean) => !v)}
             onTree={b.openSessionTree}
@@ -101,6 +102,7 @@ export default function App() {
           onManageProject={(folder) => r.openFor("project", folder)}
           onConnectorsGlobal={() => c.openFor("global")}
           onConnectorsProject={(folder) => c.openFor("project", folder)}
+          onNewChat={() => b.startGlobal()}
         />
       )}
       <Toasts toasts={b.toasts} />
@@ -158,6 +160,7 @@ function Launcher(props: {
   onManageProject: (folder: string) => void;
   onConnectorsGlobal: () => void;
   onConnectorsProject: (folder: string) => void;
+  onNewChat: () => void;
 }) {
   return (
     <div className="launcher">
@@ -171,11 +174,12 @@ function Launcher(props: {
 
       {!props.folder ? (
         <div className="launcher-body">
-          <h2>Open a project</h2>
-          <p className="muted">Each project runs in its own sandboxed container. Choose a folder to start or resume a session.</p>
+          <h2>Start working</h2>
+          <p className="muted">Open a folder to work on files in a sandbox, or start a global chat — an assistant with your connectors &amp; skills but no file access.</p>
           <div className="folder-actions">
             <button className="primary" onClick={props.onPick}>Open a folder…</button>
-            <button className="secondary" onClick={props.onManageGlobal}>🧩 Global extensions & skills</button>
+            <button className="secondary" onClick={props.onNewChat}>💬 New chat</button>
+            <button className="secondary" onClick={props.onManageGlobal}>🧩 Global extensions &amp; skills</button>
             <button className="secondary" onClick={props.onConnectorsGlobal}>🔌 Global connectors</button>
           </div>
           {props.recentFolders.length > 0 && (
@@ -441,6 +445,7 @@ function TopBar(props: {
   hello: { piVersion: string; sessionId?: string } | null;
   currentModel: { provider: string; id: string } | null;
   models: { provider: string; id: string }[];
+  globalMode: boolean;
   onEndSessions: () => void;
   onEndHome: () => void;
   onPickModel: (provider: string, id: string) => void;
@@ -460,6 +465,7 @@ function TopBar(props: {
   return (
     <div className="topbar">
       <span className="brand">Piwork</span>
+      {props.globalMode && <span className="mode-badge">global chat</span>}
       <span className={`conn conn-${props.connection}`}>{props.connection}</span>
       {props.hello && <span className="muted">pi {props.hello.piVersion}</span>}
       <div className="spacer" />
@@ -481,8 +487,14 @@ function TopBar(props: {
         </select>
       )}
       <button className="secondary" onClick={props.onTree} disabled={props.treeBusy} title={props.treeBusy ? "Rewind is available when the agent is idle" : "Rewind — jump back to an earlier point"}>⏪ Rewind</button>
-      <button onClick={props.onEndSessions} title="End the sandbox and return to this folder's sessions">End · Sessions</button>
-      <button onClick={props.onEndHome} title="End the sandbox and return to the folders home">End · Home</button>
+      {props.globalMode ? (
+        <button onClick={props.onEndHome} title="End the chat and return home">End chat</button>
+      ) : (
+        <>
+          <button onClick={props.onEndSessions} title="End the sandbox and return to this folder's sessions">End · Sessions</button>
+          <button onClick={props.onEndHome} title="End the sandbox and return to the folders home">End · Home</button>
+        </>
+      )}
       <button className="secondary" onClick={props.onResources} title="Manage skills, plugins & extensions">🧩</button>
       <button className="secondary" onClick={props.onConnectors} title="Manage MCP connectors (Slack, Notion, …)">🔌</button>
       {props.artifactCount > 0 && (

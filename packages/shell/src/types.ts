@@ -13,6 +13,7 @@ export interface SessionMeta {
 export interface PiworkApi {
   pickWorkspace(): Promise<string | null>;
   startSession(workspace: string, session?: string): Promise<{ ok: boolean; error?: string }>;
+  startGlobalSession(session?: string): Promise<{ ok: boolean; error?: string }>;
   stopSession(): Promise<void>;
   recentFolders(): Promise<string[]>;
   listSessions(workspace: string): Promise<SessionMeta[]>;

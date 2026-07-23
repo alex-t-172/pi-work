@@ -205,8 +205,11 @@ const createRuntime: CreateAgentSessionRuntimeFactory = async ({ cwd, sessionMan
       ...(fs.existsSync(PIWORK_SKILLS_DIR) ? { additionalSkillPaths: [PIWORK_SKILLS_DIR] } : {}),
     },
   });
+  // Global chat mode restricts built-in file tools (read/bash/edit/write); extension &
+  // connector tools remain, so it's chat + connectors/skills with no filesystem reach.
+  const noTools = process.env.PIWORK_NO_TOOLS as "all" | "builtin" | undefined;
   return {
-    ...(await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent })),
+    ...(await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent, ...(noTools ? { noTools } : {}) })),
     services,
     diagnostics: services.diagnostics,
   };

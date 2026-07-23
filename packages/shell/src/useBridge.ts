@@ -41,6 +41,7 @@ export function useBridge() {
   const [launcherFolder, setLauncherFolder] = useState<string | null>(null);
   const [launcherSessions, setLauncherSessions] = useState<SessionMeta[] | null>(null);
   const [activeFolder, setActiveFolder] = useState<string | null>(null);
+  const [globalMode, setGlobalMode] = useState(false);
 
   const idc = useRef(0);
   const nextId = () => `it-${++idc.current}`;
@@ -354,6 +355,7 @@ export function useBridge() {
   }, []);
 
   const startWith = useCallback(async (folder: string, session?: string) => {
+    setGlobalMode(false);
     setActiveFolder(folder);
     setConnection("starting");
     resetSessionState();
@@ -365,6 +367,18 @@ export function useBridge() {
       void refreshRecent();
     }
   }, [pushToast, refreshRecent, resetSessionState]);
+
+  const startGlobal = useCallback(async (session?: string) => {
+    setGlobalMode(true);
+    setActiveFolder(null);
+    setConnection("starting");
+    resetSessionState();
+    const res = await window.piwork.startGlobalSession(session);
+    if (!res.ok) {
+      setConnection("error");
+      pushToast(res.error ?? "failed to start", "error");
+    }
+  }, [pushToast, resetSessionState]);
 
   // End the session (kill the sandbox), then choose where to land.
   const endSession = useCallback(async () => {
@@ -448,7 +462,7 @@ export function useBridge() {
 
   return {
     connection, hello, items, streaming, statuses, widgets, dialog, toasts, models, currentModel, stderrLog, debugLog, login,
-    recentFolders, launcherFolder, launcherSessions, activeFolder,
+    recentFolders, launcherFolder, launcherSessions, activeFolder, globalMode, startGlobal,
     artifacts, artifactsOpen, setArtifactsOpen, lastArtifactKey, commands,
     sessionTree, treeOpen, setTreeOpen, openSessionTree, rewindTo, rewinding, injectedText,
     submit, abort, respondDialog, setModel,

@@ -38,6 +38,7 @@ body {
 .brand { font-weight: 700; letter-spacing: 0.3px; }
 .spacer { flex: 1; }
 .muted { color: var(--muted); font-size: 12px; }
+.mode-badge { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; padding: 2px 8px; border-radius: 999px; background: var(--user); color: var(--fg); }
 .conn { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; padding: 2px 8px; border-radius: 999px; background: var(--panel); color: var(--muted); }
 .conn-connected { color: #0b0; }
 .conn-error, .conn-exited { color: var(--error); }

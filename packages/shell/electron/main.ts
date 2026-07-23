@@ -210,23 +210,27 @@ ipcMain.handle("piwork:pickWorkspace", async () => {
   return res.canceled || !res.filePaths[0] ? null : res.filePaths[0];
 });
 
-async function startSessionFor(workspace: string, session?: string): Promise<{ ok: boolean; error?: string }> {
+async function startSessionFor(workspace: string, session?: string, opts?: { global?: boolean }): Promise<{ ok: boolean; error?: string }> {
   try {
     await bridge?.stop();
     bridge = new ContainerBridge();
     wireBridge(bridge);
     const mount = agentMount();
     lastAgent = { workspace, ...mount };
-    addRecent(workspace);
-    // session: undefined/"new" → fresh; "recent" → continue latest; else a session path.
-    log(`starting session: workspace=${workspace} session=${session ?? "new"} agentDir=${mount.agentHostDir ?? mount.agentVolume} hostGateway=${DEV_ADD_HOST_GATEWAY} suite=${DEV_SUITE_DIR ?? "(none)"}`);
+    if (!opts?.global) addRecent(workspace); // global chat isn't a folder
+    log(`starting ${opts?.global ? "GLOBAL " : ""}session: workspace=${workspace} session=${session ?? "new"} agentDir=${mount.agentHostDir ?? mount.agentVolume} suite=${DEV_SUITE_DIR ?? "(none)"}`);
     bridge.start({
       workspace,
       image: IMAGE,
       addHostGateway: DEV_ADD_HOST_GATEWAY,
       ...mount,
       extraDockerArgs: [...suiteMountArgs, ...shareAgentsArgs(), ...connectorsMountArgs()],
-      env: { PIWORK_SESSION_DIR: sessionDirFor(workspace), PIWORK_WS_KEY: hash(workspace), ...(session ? { PIWORK_SESSION: session } : {}) },
+      env: {
+        PIWORK_SESSION_DIR: sessionDirFor(workspace),
+        PIWORK_WS_KEY: hash(workspace),
+        ...(session ? { PIWORK_SESSION: session } : {}),
+        ...(opts?.global ? { PIWORK_NO_TOOLS: "builtin" } : {}), // chat-only: no filesystem tools
+      },
     });
     return { ok: true };
   } catch (err) {
@@ -235,6 +239,8 @@ async function startSessionFor(workspace: string, session?: string): Promise<{ o
 }
 
 ipcMain.handle("piwork:startSession", (_e, workspace: string, session?: string) => startSessionFor(workspace, session));
+// Global chat: folderless (mount only the neutral global cwd → no host files), tool-restricted.
+ipcMain.handle("piwork:startGlobalSession", (_e, session?: string) => startSessionFor(globalCwd(), session, { global: true }));
 ipcMain.handle("piwork:recentFolders", () => readRecent());
 ipcMain.handle("piwork:listSessions", (_e, workspace: string) => listSessions(workspace));
 

@@ -12,6 +12,8 @@ export interface PiworkApi {
   pickWorkspace(): Promise<string | null>;
   /** Start the container for a workspace. `session` = a session path, "recent", or omit for new. */
   startSession(workspace: string, session?: string): Promise<{ ok: boolean; error?: string }>;
+  /** Start a folderless, tool-restricted global chat session. */
+  startGlobalSession(session?: string): Promise<{ ok: boolean; error?: string }>;
   /** Stop the current container. */
   stopSession(): Promise<void>;
   /** Recently opened folders (most recent first). */
@@ -57,6 +59,7 @@ export interface PiworkApi {
 const api: PiworkApi = {
   pickWorkspace: () => ipcRenderer.invoke("piwork:pickWorkspace"),
   startSession: (workspace, session) => ipcRenderer.invoke("piwork:startSession", workspace, session),
+  startGlobalSession: (session) => ipcRenderer.invoke("piwork:startGlobalSession", session),
   stopSession: () => ipcRenderer.invoke("piwork:stopSession"),
   recentFolders: () => ipcRenderer.invoke("piwork:recentFolders"),
   listSessions: (workspace) => ipcRenderer.invoke("piwork:listSessions", workspace),
