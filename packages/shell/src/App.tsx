@@ -32,7 +32,15 @@ export default function App() {
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const [showDebug, setShowDebug] = useState(false);
   const [showTheme, setShowTheme] = useState(false);
+  const [showProviders, setShowProviders] = useState(false);
   const [artWidth, setArtWidth] = useState(520);
+  // Connected/authorized providers = those with available models (+ the current one).
+  const connectedProviders = useMemo(() => {
+    const set = new Set<string>();
+    if (b.currentModel?.provider) set.add(b.currentModel.provider);
+    for (const m of b.models) set.add(m.provider);
+    return [...set];
+  }, [b.currentModel, b.models]);
   const inSession = b.connection === "connected" || b.connection === "starting";
   const showArtifacts = inSession && b.artifactsOpen && Object.keys(b.artifacts).length > 0;
 
@@ -50,7 +58,9 @@ export default function App() {
             onEndHome={b.endToHome}
             onPickModel={b.setModel}
             onToggleDebug={() => setShowDebug((v) => !v)}
-            onLogin={b.startLogin}
+            connectedProviders={connectedProviders}
+            currentProvider={b.currentModel?.provider}
+            onProviders={() => setShowProviders(true)}
             onTheme={() => setShowTheme(true)}
             onResources={() => b.activeFolder && r.openFor("project", b.activeFolder)}
             onConnectors={() => b.activeFolder && c.openFor("project", b.activeFolder)}
@@ -95,6 +105,14 @@ export default function App() {
       <Toasts toasts={b.toasts} />
       {showTheme && (
         <ThemeModal theme={t.theme} onPreset={t.setPreset} onOverride={t.setOverride} onReset={t.resetTweaks} onClose={() => setShowTheme(false)} />
+      )}
+      {showProviders && (
+        <ProvidersModal
+          connected={connectedProviders}
+          current={b.currentModel?.provider}
+          onConnect={() => { setShowProviders(false); b.startLogin(); }}
+          onClose={() => setShowProviders(false)}
+        />
       )}
       {r.open && <ResourcesModal r={r} inSession={inSession} onClose={r.close} />}
       {c.open && <ConnectorsModal c={c} inSession={inSession} onClose={c.close} />}
@@ -145,7 +163,7 @@ function Launcher(props: {
       <div className="launcher-head">
         <span className="brand">Piwork</span>
         <div className="spacer" />
-        <button className="secondary" onClick={props.onLogin}>Login</button>
+        <button className="secondary" onClick={props.onLogin}>Connect provider</button>
         <button className="secondary" onClick={props.onTheme} title="Theme">🎨</button>
         <button className="secondary" onClick={props.onToggleDebug} title="Debug drawer">🐞</button>
       </div>
@@ -415,7 +433,9 @@ function TopBar(props: {
   onEndHome: () => void;
   onPickModel: (provider: string, id: string) => void;
   onToggleDebug: () => void;
-  onLogin: () => void;
+  connectedProviders: string[];
+  currentProvider?: string;
+  onProviders: () => void;
   onTheme: () => void;
   onResources: () => void;
   onConnectors: () => void;
@@ -455,7 +475,13 @@ function TopBar(props: {
       {props.artifactCount > 0 && (
         <button className="secondary" onClick={props.onArtifacts} title="Artifacts">🖼 {props.artifactCount}</button>
       )}
-      <button className="secondary" onClick={props.onLogin} title="Sign in to a model provider (OAuth)">Login</button>
+      {props.connectedProviders.length > 0 ? (
+        <button className="secondary" onClick={props.onProviders} title="Model providers">
+          <span className="conn-dot" /> {props.currentProvider ?? props.connectedProviders[0]}
+        </button>
+      ) : (
+        <button className="secondary" onClick={props.onProviders} title="Connect a model provider">Connect provider</button>
+      )}
       <button className="secondary" onClick={props.onTheme} title="Theme">🎨</button>
       <button className="secondary" onClick={props.onToggleDebug} title="Debug drawer">🐞</button>
     </div>
@@ -961,6 +987,38 @@ function ConnectorsModal(props: { c: ReturnType<typeof useConnectors>; inSession
         <div className="modal-actions">
           {c.dirty && props.inSession && <button className="primary" onClick={c.reload}>Reload session to apply</button>}
           <button onClick={props.onClose}>Done</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProvidersModal(props: { connected: string[]; current?: string; onConnect: () => void; onClose: () => void }) {
+  return (
+    <div className="modal-backdrop" onClick={props.onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-title">Model providers</div>
+        {props.connected.length > 0 ? (
+          <>
+            <div className="modal-message">Connected — the agent can use these models:</div>
+            <div className="options">
+              {props.connected.map((p) => (
+                <div key={p} className="res-row">
+                  <div className="res-main">
+                    <span className="res-name"><span className="conn-dot" /> {p}</span>
+                    {p === props.current && <span className="res-desc">current model</span>}
+                  </div>
+                  <span className="scope-badge scope-project">connected</span>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className="modal-message">No model provider connected yet. Connect one to start using models.</div>
+        )}
+        <div className="modal-actions">
+          <button className="primary" onClick={props.onConnect}>Connect a provider…</button>
+          <button className="secondary" onClick={props.onClose}>Done</button>
         </div>
       </div>
     </div>

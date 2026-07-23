@@ -52,6 +52,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 button.secondary { background: transparent; }
 .link { background: none; border: none; color: var(--accent); padding: 0 0 0 8px; }
 .model-picker { background: var(--panel); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; max-width: 260px; }
+.conn-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--live); margin-right: 5px; vertical-align: middle; }
 
 .statusbar { display: flex; gap: 8px; padding: 6px 12px; background: var(--bg2); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
 .chip { font-size: 12px; color: var(--muted); background: var(--panel); border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; }
