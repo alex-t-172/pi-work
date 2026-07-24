@@ -217,7 +217,7 @@ function Launcher(props: {
           <h2>Start working</h2>
           <p className="muted">Open a folder to work on files in a sandbox, or start a global chat — an assistant with your connectors &amp; skills but no file access. In a global chat you can also ask Piwork to configure itself: add global skills, commands &amp; tools.</p>
           <div className="folder-actions">
-            <button className="primary" onClick={props.onPick}>Open a folder…</button>
+            <button className="primary" onClick={props.onPick}>Open a folder to work in…</button>
             <button className="secondary" onClick={props.onNewChat}>💬 New chat</button>
           </div>
           {props.recentFolders.length > 0 && (
@@ -409,8 +409,9 @@ function FilesPanel(props: {
         <button onClick={props.onClose} title="Close panel">✕</button>
       </header>
       {props.onOpenFolder && dir && (
-        <button className="primary open-folder" onClick={() => props.onOpenFolder!(dir)} title={`Start a sandbox in ${dir}`}>
-          Open “{basename(dir)}” →
+        <button className="primary open-folder" onClick={() => props.onOpenFolder!(dir)} title={`Start an agent sandbox in ${dir}`}>
+          <span className="of-main">▶ Work in this folder</span>
+          <span className="of-sub">Start an agent sandbox rooted here</span>
         </button>
       )}
       {dir && (
@@ -572,6 +573,9 @@ function ArtifactsPane(props: {
           </select>
         ) : (
           <strong className="art-title">{title}</strong>
+        )}
+        {active === "file" && (
+          <span className="ro-chip" title="Files here are read-only — start a session and ask the agent to make changes">read-only</span>
         )}
         <div className="spacer" />
         <button onClick={props.onClose} title="Close panel">✕</button>

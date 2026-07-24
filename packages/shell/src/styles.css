@@ -32,7 +32,10 @@ body {
 /* Files panel (host-side workspace browser) */
 .files-panel { width: 260px; flex-shrink: 0; display: flex; flex-direction: column; background: var(--bg2); border-right: 1px solid var(--border); min-height: 0; }
 .files-panel header { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
-.open-folder { margin: 8px; text-align: center; }
+.open-folder { margin: 8px; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; }
+.open-folder .of-main { font-weight: 600; }
+.open-folder .of-sub { font-size: 11px; font-weight: 400; opacity: 0.85; }
+.ro-chip { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); background: var(--panel); border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px; white-space: nowrap; }
 .files-crumb { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 6px 10px; border-bottom: 1px solid var(--border); font-size: 12px; }
 .files-crumb .link { padding: 0 2px; }
 .crumb-up { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; color: var(--fg); font-size: 12px; line-height: 1; padding: 3px 7px; margin-right: 4px; cursor: pointer; }
