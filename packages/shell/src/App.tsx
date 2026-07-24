@@ -48,6 +48,19 @@ export default function App() {
     <div className="app">
       {inSession ? (
         <div className="app-row">
+        <ActivityRail
+          globalMode={b.globalMode}
+          onResources={() => (b.globalMode ? r.openFor("global") : b.activeFolder && r.openFor("project", b.activeFolder))}
+          onConnectors={() => (b.globalMode ? c.openFor("global") : b.activeFolder && c.openFor("project", b.activeFolder))}
+          artifactCount={Object.keys(b.artifacts).length}
+          artifactsOpen={b.artifactsOpen}
+          onArtifacts={() => b.setArtifactsOpen((v: boolean) => !v)}
+          onTree={b.openSessionTree}
+          treeBusy={b.streaming}
+          treeOpen={b.treeOpen}
+          onTheme={() => setShowTheme(true)}
+          onToggleDebug={() => setShowDebug((v) => !v)}
+        />
         <div className="app-col">
           <TopBar
             connection={b.connection}
@@ -58,17 +71,9 @@ export default function App() {
             onEndSessions={b.endToSessions}
             onEndHome={b.endToHome}
             onPickModel={b.setModel}
-            onToggleDebug={() => setShowDebug((v) => !v)}
             connectedProviders={connectedProviders}
             currentProvider={b.currentModel?.provider}
             onProviders={() => setShowProviders(true)}
-            onTheme={() => setShowTheme(true)}
-            onResources={() => (b.globalMode ? r.openFor("global") : b.activeFolder && r.openFor("project", b.activeFolder))}
-            onConnectors={() => (b.globalMode ? c.openFor("global") : b.activeFolder && c.openFor("project", b.activeFolder))}
-            artifactCount={Object.keys(b.artifacts).length}
-            onArtifacts={() => b.setArtifactsOpen((v: boolean) => !v)}
-            onTree={b.openSessionTree}
-            treeBusy={b.streaming}
           />
           <StatusBar statuses={b.statuses} streaming={b.streaming} onAbort={b.abort} />
           <Widgets lines={b.widgets.above} placement="above" />
@@ -440,6 +445,50 @@ function DebugDrawer(props: { debugLog: string[]; stderrLog: string[]; onClose: 
   );
 }
 
+// Left activity rail: the panels/tools that used to crowd the top bar. Icon column with
+// captions (friendly for non-devs), active-state highlighting. This is also the dock for
+// extension setWidget panels (Phase 2+) and the Files panel.
+function ActivityRail(props: {
+  globalMode: boolean;
+  onResources: () => void;
+  onConnectors: () => void;
+  artifactCount: number;
+  artifactsOpen: boolean;
+  onArtifacts: () => void;
+  onTree: () => void;
+  treeBusy: boolean;
+  treeOpen: boolean;
+  onTheme: () => void;
+  onToggleDebug: () => void;
+}) {
+  const artActive = props.artifactsOpen && props.artifactCount > 0;
+  return (
+    <div className="activity-rail">
+      <button className="rail-btn" onClick={props.onResources} title="Manage skills, plugins & extensions">
+        <span className="rail-ico">🧩</span>Skills
+      </button>
+      <button className="rail-btn" onClick={props.onConnectors} title="Manage MCP connectors (Slack, Notion, …)">
+        <span className="rail-ico">🔌</span>Connect
+      </button>
+      <button className={`rail-btn${artActive ? " active" : ""}`} onClick={props.onArtifacts} title="Artifacts & document viewer">
+        <span className="rail-ico">🖼</span>Docs
+        {props.artifactCount > 0 && <span className="rail-badge">{props.artifactCount}</span>}
+      </button>
+      <button className={`rail-btn${props.treeOpen ? " active" : ""}`} onClick={props.onTree} disabled={props.treeBusy} title={props.treeBusy ? "Rewind is available when the agent is idle" : "Rewind — jump back to an earlier point"}>
+        <span className="rail-ico">⏪</span>Rewind
+      </button>
+      <div className="rail-spacer" />
+      <button className="rail-btn" onClick={props.onTheme} title="Theme">
+        <span className="rail-ico">🎨</span>Theme
+      </button>
+      <button className="rail-btn" onClick={props.onToggleDebug} title="Debug drawer">
+        <span className="rail-ico">🐞</span>Debug
+      </button>
+    </div>
+  );
+}
+
+// Slim top bar: identity + session context (model) + connection/provider + End.
 function TopBar(props: {
   connection: string;
   hello: { piVersion: string; sessionId?: string } | null;
@@ -449,17 +498,9 @@ function TopBar(props: {
   onEndSessions: () => void;
   onEndHome: () => void;
   onPickModel: (provider: string, id: string) => void;
-  onToggleDebug: () => void;
   connectedProviders: string[];
   currentProvider?: string;
   onProviders: () => void;
-  onTheme: () => void;
-  onResources: () => void;
-  onConnectors: () => void;
-  artifactCount: number;
-  onArtifacts: () => void;
-  onTree: () => void;
-  treeBusy: boolean;
 }) {
   const value = props.currentModel ? `${props.currentModel.provider}/${props.currentModel.id}` : "";
   return (
@@ -486,7 +527,13 @@ function TopBar(props: {
           ))}
         </select>
       )}
-      <button className="secondary" onClick={props.onTree} disabled={props.treeBusy} title={props.treeBusy ? "Rewind is available when the agent is idle" : "Rewind — jump back to an earlier point"}>⏪ Rewind</button>
+      {props.connectedProviders.length > 0 ? (
+        <button className="secondary" onClick={props.onProviders} title="Model providers">
+          <span className="conn-dot" /> {props.currentProvider ?? props.connectedProviders[0]}
+        </button>
+      ) : (
+        <button className="secondary" onClick={props.onProviders} title="Connect a model provider">Connect provider</button>
+      )}
       {props.globalMode ? (
         <button onClick={props.onEndHome} title="End the chat and return home">End chat</button>
       ) : (
@@ -495,20 +542,6 @@ function TopBar(props: {
           <button onClick={props.onEndHome} title="End the sandbox and return to the folders home">End · Home</button>
         </>
       )}
-      <button className="secondary" onClick={props.onResources} title="Manage skills, plugins & extensions">🧩</button>
-      <button className="secondary" onClick={props.onConnectors} title="Manage MCP connectors (Slack, Notion, …)">🔌</button>
-      {props.artifactCount > 0 && (
-        <button className="secondary" onClick={props.onArtifacts} title="Artifacts">🖼 {props.artifactCount}</button>
-      )}
-      {props.connectedProviders.length > 0 ? (
-        <button className="secondary" onClick={props.onProviders} title="Model providers">
-          <span className="conn-dot" /> {props.currentProvider ?? props.connectedProviders[0]}
-        </button>
-      ) : (
-        <button className="secondary" onClick={props.onProviders} title="Connect a model provider">Connect provider</button>
-      )}
-      <button className="secondary" onClick={props.onTheme} title="Theme">🎨</button>
-      <button className="secondary" onClick={props.onToggleDebug} title="Debug drawer">🐞</button>
     </div>
   );
 }
