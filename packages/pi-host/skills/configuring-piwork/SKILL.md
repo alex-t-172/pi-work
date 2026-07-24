@@ -14,12 +14,14 @@ file/bash tools. What you *can* do is configure **Piwork itself** through four t
 - `piwork_write_config` — create/overwrite one
 - `piwork_delete_config` — remove one
 
-These operate on Piwork's **global config store**, which loads into *every* session
-(this global chat and every project folder the user opens). Two folders matter:
+These write into Piwork's **global config**, which loads into *every* session (this global
+chat and every project folder the user opens). All paths start with one of two folders:
 
 - `skills/<name>/SKILL.md` — a **skill**: markdown guidance the agent loads on demand.
-- `extensions/<name>/extension.ts` — an **extension**: code adding slash `/commands`,
-  tools, or UI. No build step — `.ts` loads directly (Node type-stripping).
+- `extensions/<name>/index.ts` — an **extension**: code adding slash `/commands`, tools, or
+  UI. (A single-file extension is `extensions/<name>.ts` instead.) The entry file MUST be
+  `index.ts` for the subdirectory form — `extension.ts` is NOT discovered. No build step:
+  `.ts` loads directly (Node type-stripping).
 
 ## The loop
 
@@ -47,8 +49,8 @@ description: The team's PR review conventions. Use when reviewing or writing a p
 
 ## An extension
 
-`extensions/<kebab-name>/extension.ts` — default-export a function receiving the
-extension API. Register a command and/or a tool:
+`extensions/<kebab-name>/index.ts` — default-export a function receiving the extension API.
+Register a command and/or a tool:
 
 ```ts
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -70,8 +72,8 @@ Tools use `pi.registerTool({ name, label, description, parameters, execute })` w
 
 ## Rules
 
-- Keep names kebab-case and paths inside `skills/` or `extensions/` — writes outside the
-  config store are rejected.
+- Keep names kebab-case and paths inside `skills/` or `extensions/` — writes anywhere else
+  (including sibling files like credentials) are rejected.
 - This is Piwork's *global* config. It is shared across all the user's projects, so keep
   it general-purpose; project-specific customisation belongs in that project's `.pi/`.
 - You cannot change model providers or credentials from here — that's deliberate.
