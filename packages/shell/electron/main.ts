@@ -337,6 +337,66 @@ ipcMain.handle("piwork:reloadSession", async () => {
 ipcMain.handle("piwork:getConfig", () => getConfig());
 ipcMain.handle("piwork:setConfig", (_e, patch: Record<string, unknown>) => setConfig(patch));
 
+// ── Host-side file viewing ────────────────────────────────────────────────────────
+// The workspace is the user's own folder (bind-mounted into the container), so the
+// main process reads it directly — no container round-trip, and it works before/after a
+// session. The sandbox exists to contain the AGENT, not the user's view of their files.
+// Guards: dirs-first sorted listing; text capped + binary-detected; images capped.
+const TEXT_CAP = 512 * 1024; // 512 KB of text max
+const IMG_CAP = 12 * 1024 * 1024; // 12 MB image max
+const IMAGE_MIME: Record<string, string> = {
+  ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif",
+  ".webp": "image/webp", ".svg": "image/svg+xml", ".bmp": "image/bmp", ".ico": "image/x-icon",
+};
+
+ipcMain.handle("piwork:listDir", async (_e, dir?: string) => {
+  const target = dir && dir.length > 0 ? dir : os.homedir();
+  try {
+    const dirents = fs.readdirSync(target, { withFileTypes: true });
+    const entries = dirents.map((d) => {
+      const full = path.join(target, d.name);
+      let isDir = d.isDirectory();
+      let size = 0;
+      // Resolve symlinks + get size without throwing on broken links.
+      try { const st = fs.statSync(full); isDir = st.isDirectory(); size = st.size; } catch { /* keep dirent guess */ }
+      return { name: d.name, path: full, isDir, size };
+    });
+    entries.sort((a, b) => (a.isDir === b.isDir ? a.name.localeCompare(b.name) : a.isDir ? -1 : 1));
+    const parent = path.dirname(target);
+    return { ok: true, path: target, parent: parent === target ? null : parent, entries };
+  } catch (err) {
+    return { ok: false, path: target, parent: null, entries: [], error: err instanceof Error ? err.message : String(err) };
+  }
+});
+
+ipcMain.handle("piwork:readFile", async (_e, filePath: string) => {
+  const name = path.basename(filePath);
+  const ext = path.extname(filePath).toLowerCase();
+  const fail = (error: string) => ({ ok: false, path: filePath, name, kind: "binary" as const, content: "", size: 0, error });
+  try {
+    const st = fs.statSync(filePath);
+    if (st.isDirectory()) return fail("is a directory");
+    // Images → data URL (capped).
+    if (IMAGE_MIME[ext]) {
+      if (st.size > IMG_CAP) return fail(`image too large (${Math.round(st.size / 1e6)} MB)`);
+      const mime = IMAGE_MIME[ext];
+      const b64 = fs.readFileSync(filePath).toString("base64");
+      return { ok: true, path: filePath, name, kind: "image" as const, content: `data:${mime};base64,${b64}`, mime, size: st.size };
+    }
+    // Everything else: read up to the cap, detect binary via NUL bytes.
+    const fd = fs.openSync(filePath, "r");
+    const buf = Buffer.alloc(Math.min(st.size, TEXT_CAP));
+    const read = fs.readSync(fd, buf, 0, buf.length, 0);
+    fs.closeSync(fd);
+    const slice = buf.subarray(0, read);
+    if (slice.subarray(0, 8000).includes(0)) return { ok: true, path: filePath, name, kind: "binary" as const, content: "", size: st.size };
+    const kind = ext === ".md" || ext === ".markdown" ? "markdown" : ext === ".html" || ext === ".htm" ? "html" : "text";
+    return { ok: true, path: filePath, name, kind: kind as "text" | "markdown" | "html", content: slice.toString("utf8"), size: st.size, truncated: st.size > read };
+  } catch (err) {
+    return fail(err instanceof Error ? err.message : String(err));
+  }
+});
+
 // ── MCP connectors ───────────────────────────────────────────────────────────────
 // Config lives host-side (secrets never in a repo) and is mounted read-only into the
 // sandbox at /root/.piwork-connectors: global.json + proj-<wsKey>.json.

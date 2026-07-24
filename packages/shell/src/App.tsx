@@ -5,7 +5,7 @@ import { useTheme } from "./useTheme.ts";
 import { useResources } from "./useResources.ts";
 import { useConnectors } from "./useConnectors.ts";
 import { PRESETS, resolveVars, THEME_TOKENS, type ThemeState, type ThemeToken } from "./theme.ts";
-import type { ChatItem, ConnectorServer, LoginState, PackageItem, ResourceItem, ResourceList, SessionMeta, UiDialog } from "./types.ts";
+import type { ChatItem, ConnectorServer, DirEntry, FileContent, LoginState, PackageItem, ResourceItem, ResourceList, SessionMeta, UiDialog } from "./types.ts";
 
 // Curated presets installable in one click (sources are container-side suite paths).
 const SUITE_PRESETS = [
@@ -34,6 +34,8 @@ export default function App() {
   const [showTheme, setShowTheme] = useState(false);
   const [showProviders, setShowProviders] = useState(false);
   const [artWidth, setArtWidth] = useState(520);
+  const [filesOpen, setFilesOpen] = useState(false);
+  const [openFile, setOpenFile] = useState<FileContent | null>(null);
   // Connected/authorized providers = those with available models (+ the current one).
   const connectedProviders = useMemo(() => {
     const set = new Set<string>();
@@ -43,7 +45,15 @@ export default function App() {
   }, [b.currentModel, b.models]);
   const inSession = b.connection === "connected" || b.connection === "starting";
   const artifactCount = Object.keys(b.artifacts).length;
-  const showArtifacts = inSession && b.artifactsOpen && artifactCount > 0;
+  const showArtifacts = inSession && b.artifactsOpen && (artifactCount > 0 || openFile !== null);
+  const filesRoot = b.activeFolder;
+
+  // Open a workspace file in the viewer pane (host-side read; no agent involved).
+  const openFileAt = (p: string) => {
+    window.piwork.readFile(p).then((f) => { setOpenFile(f); b.setArtifactsOpen(true); });
+  };
+  // Files/open-file are session-scoped; clear when the session ends.
+  useEffect(() => { if (!inSession) { setFilesOpen(false); setOpenFile(null); } }, [inSession]);
 
   // Rail items shared by both contexts (bottom group).
   const railBottom: RailItem[] = [
@@ -51,6 +61,8 @@ export default function App() {
     { key: "debug", icon: "🐞", label: "Debug", onClick: () => setShowDebug((v) => !v), title: "Debug drawer" },
   ];
   const sessionRailTop: RailItem[] = [
+    // Files: only a real workspace has files (the folderless global chat has none).
+    ...(b.globalMode || !filesRoot ? [] : [{ key: "files", icon: "📁", label: "Files", title: "Browse workspace files", active: filesOpen, onClick: () => setFilesOpen((v) => !v) } as RailItem]),
     { key: "skills", icon: "🧩", label: "Skills", title: "Manage skills, plugins & extensions", onClick: () => (b.globalMode ? r.openFor("global") : b.activeFolder && r.openFor("project", b.activeFolder)) },
     { key: "connect", icon: "🔌", label: "Connect", title: "Manage MCP connectors (Slack, Notion, …)", onClick: () => (b.globalMode ? c.openFor("global") : b.activeFolder && c.openFor("project", b.activeFolder)) },
     { key: "docs", icon: "🖼", label: "Docs", title: "Artifacts & document viewer", badge: artifactCount, active: b.artifactsOpen && artifactCount > 0, onClick: () => b.setArtifactsOpen((v: boolean) => !v) },
@@ -66,6 +78,9 @@ export default function App() {
       {inSession ? (
         <div className="app-row">
         <ActivityRail top={sessionRailTop} bottom={railBottom} />
+        {filesOpen && filesRoot && (
+          <FilesPanel root={filesRoot} openPath={openFile?.path ?? null} onOpenFile={openFileAt} onClose={() => setFilesOpen(false)} />
+        )}
         <div className="app-col">
           <TopBar
             connection={b.connection}
@@ -90,6 +105,7 @@ export default function App() {
           <ArtifactsPane
             artifacts={b.artifacts}
             lastKey={b.lastArtifactKey}
+            openFile={openFile}
             width={artWidth}
             onWidth={setArtWidth}
             onClose={() => b.setArtifactsOpen(false)}
@@ -298,9 +314,95 @@ function LoginModal(props: {
 // style/script + data: images, but blocks ALL network/framing (no exfiltration). Combined
 // with the iframe's sandbox="allow-scripts" (opaque origin, no same-origin access), this is
 // the design's CSP-locked, no-Node escape hatch.
+const VIEWER_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; script-src 'unsafe-inline'";
 function artifactSrcDoc(body: string): string {
-  const csp = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; script-src 'unsafe-inline'";
-  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><style>body{font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#16181d;background:#fff;margin:14px}pre{background:#f0f1f4;padding:10px;border-radius:6px;overflow:auto}</style></head><body>${body}</body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${VIEWER_CSP}"><style>body{font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#16181d;background:#fff;margin:14px}pre{background:#f0f1f4;padding:10px;border-radius:6px;overflow:auto;white-space:pre-wrap;word-break:break-word}img{max-width:100%}</style></head><body>${body}</body></html>`;
+}
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>]/g, (c) => (c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;"));
+}
+// A full HTML file: keep its own <head>/styles but inject our CSP so it can't reach the network.
+function htmlDocWithCsp(html: string): string {
+  const meta = `<meta http-equiv="Content-Security-Policy" content="${VIEWER_CSP}">`;
+  if (/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, (m) => m + meta);
+  if (/<html[^>]*>/i.test(html)) return html.replace(/<html[^>]*>/i, (m) => `${m}<head>${meta}</head>`);
+  return `<!doctype html><html><head>${meta}</head><body>${html}</body></html>`;
+}
+// Normalise a viewer document (file or artifact) into an iframe srcDoc + title.
+function fileSrcDoc(f: FileContent): string {
+  if (f.kind === "image") return artifactSrcDoc(`<img src="${f.content}" alt="${escapeHtml(f.name)}">`);
+  if (f.kind === "html") return htmlDocWithCsp(f.content);
+  if (f.kind === "markdown") return artifactSrcDoc(marked.parse(f.content) as string);
+  if (f.kind === "binary") return artifactSrcDoc(`<p style="color:#8b909a">Can't preview this file type (binary).</p>`);
+  const note = f.truncated ? `<p style="color:#8b909a">Showing the first part of a large file.</p>` : "";
+  return artifactSrcDoc(`${note}<pre>${escapeHtml(f.content)}</pre>`);
+}
+
+function humanSize(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+// Host-side file browser. In-session it's rooted at the workspace; it navigates by
+// breadcrumb (click a folder to descend). Clicking a file opens it in the viewer pane.
+// Reads go straight through the main process (window.piwork.listDir) — no agent needed.
+function FilesPanel(props: { root: string; onOpenFile: (path: string) => void; openPath: string | null; onClose: () => void }) {
+  const [dir, setDir] = useState(props.root);
+  const [listing, setListing] = useState<{ entries: DirEntry[]; error?: string } | null>(null);
+  const [nonce, setNonce] = useState(0);
+  useEffect(() => { setDir(props.root); }, [props.root]);
+  useEffect(() => {
+    let live = true;
+    setListing(null);
+    window.piwork.listDir(dir).then((l) => { if (live) setListing({ entries: l.entries, error: l.error }); });
+    return () => { live = false; };
+  }, [dir, nonce]);
+  // Breadcrumb: workspace root name + path below it (don't climb above the workspace).
+  const rel = dir.startsWith(props.root) ? dir.slice(props.root.length).replace(/^\/+/, "") : dir;
+  const segs = rel ? rel.split("/") : [];
+  const atRoot = dir === props.root;
+  return (
+    <div className="files-panel">
+      <header>
+        <strong>Files</strong>
+        <div className="spacer" />
+        <button className="secondary" onClick={() => setNonce((n) => n + 1)} title="Refresh">⟳</button>
+        <button onClick={props.onClose} title="Close panel">✕</button>
+      </header>
+      <div className="files-crumb">
+        <button className="link" disabled={atRoot} onClick={() => setDir(props.root)}>{basename(props.root)}</button>
+        {segs.map((s, i) => (
+          <span key={i}>
+            <span className="crumb-sep">/</span>
+            <button className="link" onClick={() => setDir(props.root + "/" + segs.slice(0, i + 1).join("/"))}>{s}</button>
+          </span>
+        ))}
+      </div>
+      <div className="files-list">
+        {listing === null ? (
+          <Loading label="Loading…" />
+        ) : listing.error ? (
+          <p className="muted" style={{ padding: 12 }}>{listing.error}</p>
+        ) : listing.entries.length === 0 ? (
+          <p className="muted" style={{ padding: 12 }}>Empty folder.</p>
+        ) : (
+          listing.entries.map((e) => (
+            <button
+              key={e.path}
+              className={`file-row${e.path === props.openPath ? " active" : ""}`}
+              onClick={() => (e.isDir ? setDir(e.path) : props.onOpenFile(e.path))}
+              title={e.path}
+            >
+              <span className="file-ico">{e.isDir ? "📁" : "📄"}</span>
+              <span className="file-name">{e.name}</span>
+              {!e.isDir && <span className="file-size">{humanSize(e.size)}</span>}
+            </button>
+          ))
+        )}
+      </div>
+    </div>
+  );
 }
 
 // Visual session tree. Renders only message nodes (recursing through non-message
@@ -374,20 +476,37 @@ function SessionTreePanel(props: { data: { tree: TreeNode[]; leaf: string | null
 
 // A resizable right-hand pane (split, not overlay) that shows ONE artifact at a time
 // full-height, with a selector to switch between them — a file viewer, not a stack of boxes.
+// The viewer pane: renders "a document" whose bytes come from EITHER an opened host file
+// OR an agent-pushed artifact. One surface, two sources; a selector switches between them.
 function ArtifactsPane(props: {
   artifacts: Record<string, { title?: string; html?: string; markdown?: string }>;
   lastKey: string | null;
+  openFile: FileContent | null;
   width: number;
   onWidth: (w: number) => void;
   onClose: () => void;
 }) {
-  const keys = Object.keys(props.artifacts);
-  const [sel, setSel] = useState<string>(props.lastKey ?? keys[keys.length - 1] ?? "");
-  // Follow newly-shown artifacts.
-  useEffect(() => { if (props.lastKey) setSel(props.lastKey); }, [props.lastKey]);
-  const active = props.artifacts[sel] ? sel : keys[keys.length - 1] ?? "";
-  const a = props.artifacts[active];
-  const body = a ? (a.html ?? (a.markdown ? (marked.parse(a.markdown) as string) : "")) : "";
+  const artKeys = Object.keys(props.artifacts);
+  // Unified doc list: the open file (if any) first, then artifacts.
+  const entries = [
+    ...(props.openFile ? [{ id: "file", label: `📄 ${props.openFile.name}` }] : []),
+    ...artKeys.map((k) => ({ id: `art:${k}`, label: props.artifacts[k].title ?? k })),
+  ];
+  const [sel, setSel] = useState<string>("");
+  // Follow whichever source most recently produced content.
+  useEffect(() => { if (props.openFile) setSel("file"); }, [props.openFile?.path]);
+  useEffect(() => { if (props.lastKey) setSel(`art:${props.lastKey}`); }, [props.lastKey]);
+  const active = entries.find((e) => e.id === sel)?.id ?? entries[entries.length - 1]?.id ?? "";
+
+  let title = "Viewer";
+  let srcDoc: string | null = null;
+  if (active === "file" && props.openFile) {
+    title = props.openFile.name;
+    srcDoc = fileSrcDoc(props.openFile);
+  } else if (active.startsWith("art:")) {
+    const a = props.artifacts[active.slice(4)];
+    if (a) { title = a.title ?? "Artifact"; srcDoc = artifactSrcDoc(a.html ?? (a.markdown ? (marked.parse(a.markdown) as string) : "")); }
+  }
 
   const startResize = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -401,20 +520,20 @@ function ArtifactsPane(props: {
     <div className="artifacts-pane" style={{ width: props.width }}>
       <div className="art-resizer" onMouseDown={startResize} title="Drag to resize" />
       <header>
-        {keys.length > 1 ? (
+        {entries.length > 1 ? (
           <select value={active} onChange={(e) => setSel(e.target.value)} className="art-select">
-            {keys.map((k) => <option key={k} value={k}>{props.artifacts[k].title ?? k}</option>)}
+            {entries.map((e) => <option key={e.id} value={e.id}>{e.label}</option>)}
           </select>
         ) : (
-          <strong className="art-title">{a?.title ?? "Artifact"}</strong>
+          <strong className="art-title">{title}</strong>
         )}
         <div className="spacer" />
         <button onClick={props.onClose} title="Close panel">✕</button>
       </header>
-      {a ? (
-        <iframe className="art-frame" title={active} sandbox="allow-scripts" srcDoc={artifactSrcDoc(body)} />
+      {srcDoc !== null ? (
+        <iframe className="art-frame" title={title} sandbox="allow-scripts" srcDoc={srcDoc} />
       ) : (
-        <div className="muted" style={{ padding: 16 }}>No artifact selected.</div>
+        <div className="muted" style={{ padding: 16 }}>Nothing to show yet. Open a file, or the agent can show an artifact here.</div>
       )}
     </div>
   );

@@ -35,6 +35,35 @@ export interface PiworkApi {
   startLogin(provider?: string): Promise<{ ok: boolean; error?: string }>;
   loginChoose(provider: string): void;
   loginInput(id: string, value: string): void;
+  /** List a directory (host-side). Omit dir for the user's home. */
+  listDir(dir?: string): Promise<DirListing>;
+  /** Read a file (host-side) as a viewer document. */
+  readFile(path: string): Promise<FileContent>;
+}
+
+export interface DirEntry {
+  name: string;
+  path: string;
+  isDir: boolean;
+  size: number;
+}
+export interface DirListing {
+  ok: boolean;
+  path: string;
+  parent: string | null;
+  entries: DirEntry[];
+  error?: string;
+}
+export interface FileContent {
+  ok: boolean;
+  path: string;
+  name: string;
+  kind: "text" | "markdown" | "html" | "image" | "binary";
+  content: string; // text for text/markdown/html; a data: URL for image; empty for binary
+  mime?: string;
+  size: number;
+  truncated?: boolean;
+  error?: string;
 }
 
 export interface TreeNode {

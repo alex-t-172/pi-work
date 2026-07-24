@@ -54,6 +54,10 @@ export interface PiworkApi {
   loginChoose(provider: string): void;
   /** Answer a login prompt/select by request id. */
   loginInput(id: string, value: string): void;
+  /** List a directory (host-side). Omit dir for the user's home. */
+  listDir(dir?: string): Promise<{ ok: boolean; path: string; parent: string | null; entries: Array<{ name: string; path: string; isDir: boolean; size: number }>; error?: string }>;
+  /** Read a file (host-side) as a viewer document. */
+  readFile(path: string): Promise<{ ok: boolean; path: string; name: string; kind: "text" | "markdown" | "html" | "image" | "binary"; content: string; mime?: string; size: number; truncated?: boolean; error?: string }>;
 }
 
 const api: PiworkApi = {
@@ -86,6 +90,8 @@ const api: PiworkApi = {
   startLogin: (provider) => ipcRenderer.invoke("piwork:startLogin", provider),
   loginChoose: (provider) => ipcRenderer.send("piwork:loginChoose", provider),
   loginInput: (id, value) => ipcRenderer.send("piwork:loginInput", id, value),
+  listDir: (dir) => ipcRenderer.invoke("piwork:listDir", dir),
+  readFile: (p) => ipcRenderer.invoke("piwork:readFile", p),
 };
 
 contextBridge.exposeInMainWorld("piwork", api);
