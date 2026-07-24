@@ -331,12 +331,33 @@ const piworkConfigExtension = (pi: {
   });
 };
 
+// Load the baked pi-mcp-adapter extension factory (in-process). Returns null if absent or
+// unloadable — MCP then simply isn't available, but the session still runs.
+async function loadMcpAdapter(): Promise<unknown | null> {
+  const entry = "/opt/pi-mcp-adapter/index.ts";
+  if (!fs.existsSync(entry)) return null;
+  try {
+    const mod = (await import(entry)) as { default?: unknown; extension?: unknown };
+    const factory = (typeof mod.default === "function" && mod.default) || (typeof mod.extension === "function" && mod.extension) || null;
+    if (!factory) { console.error("[pi-host] mcp-adapter: no callable extension export"); return null; }
+    console.error("[pi-host] mcp-adapter loaded");
+    return factory;
+  } catch (e) {
+    console.error("[pi-host] mcp-adapter load failed:", e instanceof Error ? e.stack ?? e.message : String(e));
+    return null;
+  }
+}
+
 const createRuntime: CreateAgentSessionRuntimeFactory = async ({ cwd, sessionManager, sessionStartEvent }) => {
   const factories: unknown[] = [piworkBaseExtension];
   // The authoring tools exist only in the global console; global skills/extensions they
   // write land in the agent store's native scan locations, so they load everywhere with
   // no additionalExtensionPaths/additionalSkillPaths wiring.
   if (CONFIG_WRITABLE) factories.push(piworkConfigExtension);
+  // MCP connectors engine (baked pi-mcp-adapter). Loaded in-process as an extension factory;
+  // defensive so a load failure degrades to "no MCP" rather than breaking the session.
+  const mcpAdapter = await loadMcpAdapter();
+  if (mcpAdapter) factories.push(mcpAdapter);
   const services = await createAgentSessionServices({
     cwd,
     resourceLoaderOptions: {
