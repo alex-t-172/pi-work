@@ -42,25 +42,30 @@ export default function App() {
     return [...set];
   }, [b.currentModel, b.models]);
   const inSession = b.connection === "connected" || b.connection === "starting";
-  const showArtifacts = inSession && b.artifactsOpen && Object.keys(b.artifacts).length > 0;
+  const artifactCount = Object.keys(b.artifacts).length;
+  const showArtifacts = inSession && b.artifactsOpen && artifactCount > 0;
+
+  // Rail items shared by both contexts (bottom group).
+  const railBottom: RailItem[] = [
+    { key: "theme", icon: "🎨", label: "Theme", onClick: () => setShowTheme(true), title: "Theme" },
+    { key: "debug", icon: "🐞", label: "Debug", onClick: () => setShowDebug((v) => !v), title: "Debug drawer" },
+  ];
+  const sessionRailTop: RailItem[] = [
+    { key: "skills", icon: "🧩", label: "Skills", title: "Manage skills, plugins & extensions", onClick: () => (b.globalMode ? r.openFor("global") : b.activeFolder && r.openFor("project", b.activeFolder)) },
+    { key: "connect", icon: "🔌", label: "Connect", title: "Manage MCP connectors (Slack, Notion, …)", onClick: () => (b.globalMode ? c.openFor("global") : b.activeFolder && c.openFor("project", b.activeFolder)) },
+    { key: "docs", icon: "🖼", label: "Docs", title: "Artifacts & document viewer", badge: artifactCount, active: b.artifactsOpen && artifactCount > 0, onClick: () => b.setArtifactsOpen((v: boolean) => !v) },
+    { key: "rewind", icon: "⏪", label: "Rewind", disabled: b.streaming, active: b.treeOpen, title: b.streaming ? "Rewind is available when the agent is idle" : "Rewind — jump back to an earlier point", onClick: b.openSessionTree },
+  ];
+  const homeRailTop: RailItem[] = [
+    { key: "skills", icon: "🧩", label: "Skills", title: "Global skills, plugins & extensions", onClick: () => r.openFor("global") },
+    { key: "connect", icon: "🔌", label: "Connect", title: "Global MCP connectors (Slack, Notion, …)", onClick: () => c.openFor("global") },
+  ];
 
   return (
     <div className="app">
       {inSession ? (
         <div className="app-row">
-        <ActivityRail
-          globalMode={b.globalMode}
-          onResources={() => (b.globalMode ? r.openFor("global") : b.activeFolder && r.openFor("project", b.activeFolder))}
-          onConnectors={() => (b.globalMode ? c.openFor("global") : b.activeFolder && c.openFor("project", b.activeFolder))}
-          artifactCount={Object.keys(b.artifacts).length}
-          artifactsOpen={b.artifactsOpen}
-          onArtifacts={() => b.setArtifactsOpen((v: boolean) => !v)}
-          onTree={b.openSessionTree}
-          treeBusy={b.streaming}
-          treeOpen={b.treeOpen}
-          onTheme={() => setShowTheme(true)}
-          onToggleDebug={() => setShowDebug((v) => !v)}
-        />
+        <ActivityRail top={sessionRailTop} bottom={railBottom} />
         <div className="app-col">
           <TopBar
             connection={b.connection}
@@ -92,23 +97,22 @@ export default function App() {
         )}
         </div>
       ) : (
-        <Launcher
-          recentFolders={b.recentFolders}
-          folder={b.launcherFolder}
-          sessions={b.launcherSessions}
-          onPick={b.pickFolder}
-          onSelectFolder={b.selectFolder}
-          onBack={b.backToFolders}
-          onStart={b.startWith}
-          onToggleDebug={() => setShowDebug((v) => !v)}
-          onLogin={b.startLogin}
-          onTheme={() => setShowTheme(true)}
-          onManageGlobal={() => r.openFor("global")}
-          onManageProject={(folder) => r.openFor("project", folder)}
-          onConnectorsGlobal={() => c.openFor("global")}
-          onConnectorsProject={(folder) => c.openFor("project", folder)}
-          onNewChat={() => b.startGlobal()}
-        />
+        <div className="app-row">
+          <ActivityRail top={homeRailTop} bottom={railBottom} />
+          <Launcher
+            recentFolders={b.recentFolders}
+            folder={b.launcherFolder}
+            sessions={b.launcherSessions}
+            onPick={b.pickFolder}
+            onSelectFolder={b.selectFolder}
+            onBack={b.backToFolders}
+            onStart={b.startWith}
+            onLogin={b.startLogin}
+            onManageProject={(folder) => r.openFor("project", folder)}
+            onConnectorsProject={(folder) => c.openFor("project", folder)}
+            onNewChat={() => b.startGlobal()}
+          />
+        </div>
       )}
       <Toasts toasts={b.toasts} />
       {showTheme && (
@@ -158,12 +162,8 @@ function Launcher(props: {
   onSelectFolder: (folder: string) => void;
   onBack: () => void;
   onStart: (folder: string, session?: string) => void;
-  onToggleDebug: () => void;
   onLogin: () => void;
-  onTheme: () => void;
-  onManageGlobal: () => void;
   onManageProject: (folder: string) => void;
-  onConnectorsGlobal: () => void;
   onConnectorsProject: (folder: string) => void;
   onNewChat: () => void;
 }) {
@@ -173,8 +173,6 @@ function Launcher(props: {
         <span className="brand">Piwork</span>
         <div className="spacer" />
         <button className="secondary" onClick={props.onLogin}>Connect provider</button>
-        <button className="secondary" onClick={props.onTheme} title="Theme">🎨</button>
-        <button className="secondary" onClick={props.onToggleDebug} title="Debug drawer">🐞</button>
       </div>
 
       {!props.folder ? (
@@ -184,8 +182,6 @@ function Launcher(props: {
           <div className="folder-actions">
             <button className="primary" onClick={props.onPick}>Open a folder…</button>
             <button className="secondary" onClick={props.onNewChat}>💬 New chat</button>
-            <button className="secondary" onClick={props.onManageGlobal}>🧩 Global extensions &amp; skills</button>
-            <button className="secondary" onClick={props.onConnectorsGlobal}>🔌 Global connectors</button>
           </div>
           {props.recentFolders.length > 0 && (
             <>
@@ -446,44 +442,28 @@ function DebugDrawer(props: { debugLog: string[]; stderrLog: string[]; onClose: 
 }
 
 // Left activity rail: the panels/tools that used to crowd the top bar. Icon column with
-// captions (friendly for non-devs), active-state highlighting. This is also the dock for
-// extension setWidget panels (Phase 2+) and the Files panel.
-function ActivityRail(props: {
-  globalMode: boolean;
-  onResources: () => void;
-  onConnectors: () => void;
-  artifactCount: number;
-  artifactsOpen: boolean;
-  onArtifacts: () => void;
-  onTree: () => void;
-  treeBusy: boolean;
-  treeOpen: boolean;
-  onTheme: () => void;
-  onToggleDebug: () => void;
-}) {
-  const artActive = props.artifactsOpen && props.artifactCount > 0;
+// captions (friendly for non-devs), active-state highlighting. Item-driven so the home
+// screen and an in-session view each compose their own set; also the intended dock for the
+// Files panel and extension setWidget panels.
+type RailItem = { key: string; icon: string; label: string; onClick: () => void; active?: boolean; disabled?: boolean; title?: string; badge?: number };
+function ActivityRail(props: { top: RailItem[]; bottom: RailItem[] }) {
+  const render = (it: RailItem) => (
+    <button
+      key={it.key}
+      className={`rail-btn${it.active ? " active" : ""}`}
+      onClick={it.onClick}
+      disabled={it.disabled}
+      title={it.title ?? it.label}
+    >
+      <span className="rail-ico">{it.icon}</span>{it.label}
+      {it.badge != null && it.badge > 0 && <span className="rail-badge">{it.badge}</span>}
+    </button>
+  );
   return (
     <div className="activity-rail">
-      <button className="rail-btn" onClick={props.onResources} title="Manage skills, plugins & extensions">
-        <span className="rail-ico">🧩</span>Skills
-      </button>
-      <button className="rail-btn" onClick={props.onConnectors} title="Manage MCP connectors (Slack, Notion, …)">
-        <span className="rail-ico">🔌</span>Connect
-      </button>
-      <button className={`rail-btn${artActive ? " active" : ""}`} onClick={props.onArtifacts} title="Artifacts & document viewer">
-        <span className="rail-ico">🖼</span>Docs
-        {props.artifactCount > 0 && <span className="rail-badge">{props.artifactCount}</span>}
-      </button>
-      <button className={`rail-btn${props.treeOpen ? " active" : ""}`} onClick={props.onTree} disabled={props.treeBusy} title={props.treeBusy ? "Rewind is available when the agent is idle" : "Rewind — jump back to an earlier point"}>
-        <span className="rail-ico">⏪</span>Rewind
-      </button>
+      {props.top.map(render)}
       <div className="rail-spacer" />
-      <button className="rail-btn" onClick={props.onTheme} title="Theme">
-        <span className="rail-ico">🎨</span>Theme
-      </button>
-      <button className="rail-btn" onClick={props.onToggleDebug} title="Debug drawer">
-        <span className="rail-ico">🐞</span>Debug
-      </button>
+      {props.bottom.map(render)}
     </div>
   );
 }
