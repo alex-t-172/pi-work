@@ -67,7 +67,14 @@ async function runList(): Promise<void> {
 /** "resources" mode: enumerate loaded skills/extensions/prompts + configured packages. */
 async function runResources(): Promise<void> {
   const agentDir = getAgentDir();
-  const loader = new DefaultResourceLoader({ cwd, agentDir });
+  const cfg = process.env.PIWORK_CONFIG_DIR;
+  const extraSkills = cfg && fs.existsSync(nodePath.join(cfg, "skills")) ? [nodePath.join(cfg, "skills")] : [];
+  const extraExts = cfg && fs.existsSync(nodePath.join(cfg, "extensions")) ? [nodePath.join(cfg, "extensions")] : [];
+  const loader = new DefaultResourceLoader({
+    cwd, agentDir,
+    ...(extraSkills.length ? { additionalSkillPaths: extraSkills } : {}),
+    ...(extraExts.length ? { additionalExtensionPaths: extraExts } : {}),
+  });
   await loader.reload();
 
   const skills = loader.getSkills().skills.map((s) => ({
@@ -197,12 +204,106 @@ const piworkBaseExtension = (pi: {
   });
 };
 
+// Piwork's own global config store, mounted from the host at this path (see main.ts
+// configMountArgs). Skills live under skills/, extensions under extensions/. Present in
+// every session (so globally-authored resources auto-load everywhere), but only WRITABLE
+// in the global console session (PIWORK_CONFIG_WRITABLE).
+const CONFIG_DIR = process.env.PIWORK_CONFIG_DIR;
+const CONFIG_WRITABLE = process.env.PIWORK_CONFIG_WRITABLE === "1";
+
+// Phase-2 global console: purpose-built tools that let the global chat configure Piwork
+// itself (author global skills/extensions) WITHOUT any raw file/bash tool. Because the
+// session runs with noTools:"builtin", these are the ONLY way to touch the filesystem and
+// they are hard-scoped to CONFIG_DIR — so the agent store (auth.json/models.json at
+// /root/.pi/agent) stays unreachable by construction.
+const piworkConfigExtension = (pi: {
+  registerTool: (t: {
+    name: string; label: string; description: string; parameters: unknown;
+    execute: (id: string, args: any) => Promise<{ content: Array<{ type: string; text: string }> }>;
+  }) => void;
+}) => {
+  const root = nodePath.resolve(CONFIG_DIR as string);
+  // Contain every path inside the config root: reject `..` traversal and absolute escapes.
+  const inRoot = (rel: unknown): string => {
+    const full = nodePath.resolve(root, String(rel ?? ""));
+    if (full !== root && !full.startsWith(root + nodePath.sep)) {
+      throw new Error(`path "${String(rel)}" escapes the Piwork config directory`);
+    }
+    return full;
+  };
+  const text = (t: string) => ({ content: [{ type: "text", text: t }] });
+  const walk = (dir: string, base: string, out: string[]) => {
+    let entries: fs.Dirent[] = [];
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      const rel = base ? `${base}/${e.name}` : e.name;
+      if (e.isDirectory()) walk(nodePath.join(dir, e.name), rel, out);
+      else out.push(rel);
+    }
+  };
+  const scoped = { type: "object", additionalProperties: false } as const;
+  const pathParam = { type: "string", description: "path relative to the config root, e.g. skills/my-skill/SKILL.md or extensions/my-ext/extension.ts" };
+
+  pi.registerTool({
+    name: "piwork_list_config",
+    label: "Piwork: list config",
+    description: "List Piwork's own global config files (skills under skills/, extensions under extensions/). These customise Piwork itself and load in every session — they are NOT the user's project files.",
+    parameters: { ...scoped, properties: {} },
+    execute: async () => {
+      const out: string[] = [];
+      walk(root, "", out);
+      return text(out.length ? out.sort().join("\n") : "(no Piwork config files yet)");
+    },
+  });
+  pi.registerTool({
+    name: "piwork_read_config",
+    label: "Piwork: read config",
+    description: "Read one of Piwork's global config files.",
+    parameters: { ...scoped, properties: { path: pathParam }, required: ["path"] },
+    execute: async (_id, args) => text(fs.readFileSync(inRoot(args?.path), "utf8")),
+  });
+  pi.registerTool({
+    name: "piwork_write_config",
+    label: "Piwork: write config",
+    description: "Create or overwrite one of Piwork's global config files (creating parent folders). Use skills/<name>/SKILL.md for a skill or extensions/<name>/extension.ts for an extension. After writing, run /piwork-reload to load it into the live session.",
+    parameters: { ...scoped, properties: { path: pathParam, content: { type: "string", description: "full file contents" } }, required: ["path", "content"] },
+    execute: async (_id, args) => {
+      const full = inRoot(args?.path);
+      fs.mkdirSync(nodePath.dirname(full), { recursive: true });
+      fs.writeFileSync(full, String(args?.content ?? ""), "utf8");
+      return text(`Wrote ${args?.path}. Run /piwork-reload to load it into this session.`);
+    },
+  });
+  pi.registerTool({
+    name: "piwork_delete_config",
+    label: "Piwork: delete config",
+    description: "Delete one of Piwork's global config files or folders. Run /piwork-reload afterwards.",
+    parameters: { ...scoped, properties: { path: pathParam }, required: ["path"] },
+    execute: async (_id, args) => {
+      fs.rmSync(inRoot(args?.path), { recursive: true, force: true });
+      return text(`Deleted ${args?.path}. Run /piwork-reload to apply.`);
+    },
+  });
+};
+
 const createRuntime: CreateAgentSessionRuntimeFactory = async ({ cwd, sessionManager, sessionStartEvent }) => {
+  const factories: unknown[] = [piworkBaseExtension];
+  // The authoring tools only exist where the config mount is writable (the global console).
+  if (CONFIG_DIR && CONFIG_WRITABLE) factories.push(piworkConfigExtension);
+  const skillPaths: string[] = [];
+  if (fs.existsSync(PIWORK_SKILLS_DIR)) skillPaths.push(PIWORK_SKILLS_DIR);
+  const extensionPaths: string[] = [];
+  // Globally-authored skills/extensions load in EVERY session (project & global alike).
+  if (CONFIG_DIR) {
+    if (fs.existsSync(nodePath.join(CONFIG_DIR, "skills"))) skillPaths.push(nodePath.join(CONFIG_DIR, "skills"));
+    if (fs.existsSync(nodePath.join(CONFIG_DIR, "extensions"))) extensionPaths.push(nodePath.join(CONFIG_DIR, "extensions"));
+  }
   const services = await createAgentSessionServices({
     cwd,
     resourceLoaderOptions: {
-      extensionFactories: [piworkBaseExtension as never],
-      ...(fs.existsSync(PIWORK_SKILLS_DIR) ? { additionalSkillPaths: [PIWORK_SKILLS_DIR] } : {}),
+      extensionFactories: factories as never,
+      ...(skillPaths.length ? { additionalSkillPaths: skillPaths } : {}),
+      ...(extensionPaths.length ? { additionalExtensionPaths: extensionPaths } : {}),
     },
   });
   // Global chat mode restricts built-in file tools (read/bash/edit/write); extension &

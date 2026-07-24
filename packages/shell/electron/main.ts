@@ -122,6 +122,22 @@ function resolveWs(workspace: string | null | undefined): string {
   return workspace && workspace.length > 0 ? workspace : globalCwd();
 }
 
+// Piwork's own global config store (skills/extensions that customise Piwork itself, not
+// any project). Host-owned, so it never contains project files. Mounted into every
+// container so globally-authored resources auto-load everywhere; WRITABLE only in the
+// global console session, where purpose-built tools (not raw file tools) edit it.
+const CONFIG_MOUNT = "/root/.piwork-config";
+function configDir(): string {
+  const dir = path.join(os.homedir(), ".piwork", "global-config");
+  for (const sub of ["skills", "extensions"]) {
+    try { fs.mkdirSync(path.join(dir, sub), { recursive: true }); } catch { /* ignore */ }
+  }
+  return dir;
+}
+function configMountArgs(writable: boolean): string[] {
+  return ["-v", `${configDir()}:${CONFIG_MOUNT}${writable ? "" : ":ro"}`];
+}
+
 /** Per-workspace session dir (container path) so history is scoped per folder. */
 function sessionDirFor(workspace: string): string {
   return `/root/.pi/agent/sessions/ws-${hash(workspace)}`;
@@ -224,12 +240,15 @@ async function startSessionFor(workspace: string, session?: string, opts?: { glo
       image: IMAGE,
       addHostGateway: DEV_ADD_HOST_GATEWAY,
       ...mount,
-      extraDockerArgs: [...suiteMountArgs, ...shareAgentsArgs(), ...connectorsMountArgs()],
+      extraDockerArgs: [...suiteMountArgs, ...shareAgentsArgs(), ...connectorsMountArgs(), ...configMountArgs(!!opts?.global)],
       env: {
         PIWORK_SESSION_DIR: sessionDirFor(workspace),
         PIWORK_WS_KEY: hash(workspace),
+        PIWORK_CONFIG_DIR: CONFIG_MOUNT, // globally-authored skills/extensions load everywhere
         ...(session ? { PIWORK_SESSION: session } : {}),
-        ...(opts?.global ? { PIWORK_NO_TOOLS: "builtin" } : {}), // chat-only: no filesystem tools
+        // Global console: chat-only (no filesystem tools) + purpose-built config-authoring
+        // tools, with a WRITABLE config mount so it can configure Piwork itself.
+        ...(opts?.global ? { PIWORK_NO_TOOLS: "builtin", PIWORK_CONFIG_WRITABLE: "1" } : {}),
       },
     });
     return { ok: true };
@@ -273,8 +292,8 @@ function listResources(workspace: string): Promise<Record<string, unknown>> {
   const cwd = resolveWs(workspace);
   return new Promise((resolve) => {
     const args = [
-      "run", "--rm", "-e", "PIWORK_MODE=resources",
-      "-v", `${cwd}:/workspace`, ...agentVolArgs(), ...suiteMountArgs, ...shareAgentsArgs(),
+      "run", "--rm", "-e", "PIWORK_MODE=resources", "-e", `PIWORK_CONFIG_DIR=${CONFIG_MOUNT}`,
+      "-v", `${cwd}:/workspace`, ...agentVolArgs(), ...suiteMountArgs, ...shareAgentsArgs(), ...configMountArgs(false),
       IMAGE,
     ];
     const p = spawn(DOCKER, args, { stdio: ["ignore", "pipe", "ignore"] });

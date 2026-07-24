@@ -175,7 +175,7 @@ function Launcher(props: {
       {!props.folder ? (
         <div className="launcher-body">
           <h2>Start working</h2>
-          <p className="muted">Open a folder to work on files in a sandbox, or start a global chat — an assistant with your connectors &amp; skills but no file access.</p>
+          <p className="muted">Open a folder to work on files in a sandbox, or start a global chat — an assistant with your connectors &amp; skills but no file access. In a global chat you can also ask Piwork to configure itself: add global skills, commands &amp; tools.</p>
           <div className="folder-actions">
             <button className="primary" onClick={props.onPick}>Open a folder…</button>
             <button className="secondary" onClick={props.onNewChat}>💬 New chat</button>
