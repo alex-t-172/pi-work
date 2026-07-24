@@ -32,6 +32,7 @@ body {
 /* Files panel (host-side workspace browser) */
 .files-panel { width: 260px; flex-shrink: 0; display: flex; flex-direction: column; background: var(--bg2); border-right: 1px solid var(--border); min-height: 0; }
 .files-panel header { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.open-folder { margin: 8px; text-align: center; }
 .files-crumb { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 6px 10px; border-bottom: 1px solid var(--border); font-size: 12px; }
 .files-crumb .link { padding: 0 2px; }
 .files-crumb .link:disabled { color: var(--fg); opacity: 1; cursor: default; }

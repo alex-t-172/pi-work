@@ -35,6 +35,7 @@ export default function App() {
   const [showProviders, setShowProviders] = useState(false);
   const [artWidth, setArtWidth] = useState(520);
   const [filesOpen, setFilesOpen] = useState(false);
+  const [homeFilesOpen, setHomeFilesOpen] = useState(false);
   const [openFile, setOpenFile] = useState<FileContent | null>(null);
   // Connected/authorized providers = those with available models (+ the current one).
   const connectedProviders = useMemo(() => {
@@ -69,6 +70,7 @@ export default function App() {
     { key: "rewind", icon: "⏪", label: "Rewind", disabled: b.streaming, active: b.treeOpen, title: b.streaming ? "Rewind is available when the agent is idle" : "Rewind — jump back to an earlier point", onClick: b.openSessionTree },
   ];
   const homeRailTop: RailItem[] = [
+    { key: "files", icon: "📁", label: "Files", title: "Browse folders — pick where to start a sandbox", active: homeFilesOpen, onClick: () => setHomeFilesOpen((v) => !v) },
     { key: "skills", icon: "🧩", label: "Skills", title: "Global skills, plugins & extensions", onClick: () => r.openFor("global") },
     { key: "connect", icon: "🔌", label: "Connect", title: "Global MCP connectors (Slack, Notion, …)", onClick: () => c.openFor("global") },
   ];
@@ -79,7 +81,7 @@ export default function App() {
         <div className="app-row">
         <ActivityRail top={sessionRailTop} bottom={railBottom} />
         {filesOpen && filesRoot && (
-          <FilesPanel root={filesRoot} openPath={openFile?.path ?? null} onOpenFile={openFileAt} onClose={() => setFilesOpen(false)} />
+          <FilesPanel initialDir={filesRoot} floor={filesRoot} openPath={openFile?.path ?? null} onOpenFile={openFileAt} onClose={() => setFilesOpen(false)} />
         )}
         <div className="app-col">
           <TopBar
@@ -115,6 +117,15 @@ export default function App() {
       ) : (
         <div className="app-row">
           <ActivityRail top={homeRailTop} bottom={railBottom} />
+          {homeFilesOpen && (
+            <FilesPanel
+              initialDir={b.launcherFolder ?? ""}
+              openPath={openFile?.path ?? null}
+              onOpenFile={(p) => window.piwork.readFile(p).then(setOpenFile)}
+              onOpenFolder={(folder) => { b.selectFolder(folder); setHomeFilesOpen(false); }}
+              onClose={() => setHomeFilesOpen(false)}
+            />
+          )}
           <Launcher
             recentFolders={b.recentFolders}
             folder={b.launcherFolder}
@@ -128,6 +139,16 @@ export default function App() {
             onConnectorsProject={(folder) => c.openFor("project", folder)}
             onNewChat={() => b.startGlobal()}
           />
+          {openFile && (
+            <ArtifactsPane
+              artifacts={{}}
+              lastKey={null}
+              openFile={openFile}
+              width={artWidth}
+              onWidth={setArtWidth}
+              onClose={() => setOpenFile(null)}
+            />
+          )}
         </div>
       )}
       <Toasts toasts={b.toasts} />
@@ -344,24 +365,39 @@ function humanSize(n: number): string {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
-// Host-side file browser. In-session it's rooted at the workspace; it navigates by
-// breadcrumb (click a folder to descend). Clicking a file opens it in the viewer pane.
-// Reads go straight through the main process (window.piwork.listDir) — no agent needed.
-function FilesPanel(props: { root: string; onOpenFile: (path: string) => void; openPath: string | null; onClose: () => void }) {
-  const [dir, setDir] = useState(props.root);
+// Host-side file browser (main-process reads — no agent). Two modes from one component:
+//  • in-session: floored at the workspace root (can't climb above it); click a file to view.
+//  • home: no floor (browse anywhere), plus an "Open this folder" action to start a sandbox
+//    there. Clicking a file still previews it. `initialDir` "" resolves to the user's home.
+function FilesPanel(props: {
+  initialDir: string;
+  floor?: string; // don't navigate above this path (in-session = workspace root)
+  onOpenFile: (path: string) => void;
+  openPath: string | null;
+  onOpenFolder?: (dir: string) => void; // home mode: open the current folder as a sandbox
+  onClose: () => void;
+}) {
+  const [dir, setDir] = useState(props.initialDir);
   const [listing, setListing] = useState<{ entries: DirEntry[]; error?: string } | null>(null);
   const [nonce, setNonce] = useState(0);
-  useEffect(() => { setDir(props.root); }, [props.root]);
+  useEffect(() => { setDir(props.initialDir); }, [props.initialDir]);
   useEffect(() => {
     let live = true;
     setListing(null);
-    window.piwork.listDir(dir).then((l) => { if (live) setListing({ entries: l.entries, error: l.error }); });
+    window.piwork.listDir(dir || undefined).then((l) => {
+      if (!live) return;
+      setListing({ entries: l.entries, error: l.error });
+      if (!dir && l.path) setDir(l.path); // adopt the resolved home path
+    });
     return () => { live = false; };
   }, [dir, nonce]);
-  // Breadcrumb: workspace root name + path below it (don't climb above the workspace).
-  const rel = dir.startsWith(props.root) ? dir.slice(props.root.length).replace(/^\/+/, "") : dir;
-  const segs = rel ? rel.split("/") : [];
-  const atRoot = dir === props.root;
+
+  // Breadcrumb from absolute segments, floored (in-session can't go above the workspace).
+  const absParts = dir.split("/").filter(Boolean);
+  const floorLen = props.floor ? props.floor.split("/").filter(Boolean).length : 0;
+  const rootLabel = props.floor ? basename(props.floor) : "/";
+  const rootDir = props.floor ?? "/";
+  const tail = absParts.slice(floorLen);
   return (
     <div className="files-panel">
       <header>
@@ -370,15 +406,22 @@ function FilesPanel(props: { root: string; onOpenFile: (path: string) => void; o
         <button className="secondary" onClick={() => setNonce((n) => n + 1)} title="Refresh">⟳</button>
         <button onClick={props.onClose} title="Close panel">✕</button>
       </header>
-      <div className="files-crumb">
-        <button className="link" disabled={atRoot} onClick={() => setDir(props.root)}>{basename(props.root)}</button>
-        {segs.map((s, i) => (
-          <span key={i}>
-            <span className="crumb-sep">/</span>
-            <button className="link" onClick={() => setDir(props.root + "/" + segs.slice(0, i + 1).join("/"))}>{s}</button>
-          </span>
-        ))}
-      </div>
+      {props.onOpenFolder && dir && (
+        <button className="primary open-folder" onClick={() => props.onOpenFolder!(dir)} title={`Start a sandbox in ${dir}`}>
+          Open “{basename(dir)}” →
+        </button>
+      )}
+      {dir && (
+        <div className="files-crumb">
+          <button className="link" disabled={dir === rootDir} onClick={() => setDir(rootDir)}>{rootLabel}</button>
+          {tail.map((s, i) => (
+            <span key={i}>
+              <span className="crumb-sep">/</span>
+              <button className="link" onClick={() => setDir("/" + absParts.slice(0, floorLen + i + 1).join("/"))}>{s}</button>
+            </span>
+          ))}
+        </div>
+      )}
       <div className="files-list">
         {listing === null ? (
           <Loading label="Loading…" />
