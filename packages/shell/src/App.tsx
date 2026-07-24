@@ -34,8 +34,7 @@ export default function App() {
   const [showTheme, setShowTheme] = useState(false);
   const [showProviders, setShowProviders] = useState(false);
   const [artWidth, setArtWidth] = useState(520);
-  const [filesOpen, setFilesOpen] = useState(false);
-  const [homeFilesOpen, setHomeFilesOpen] = useState(false);
+  const [filesOpen, setFilesOpen] = useState(false); // one shared drawer state across home/folder/session
   const [openFile, setOpenFile] = useState<FileContent | null>(null);
   // Connected/authorized providers = those with available models (+ the current one).
   const connectedProviders = useMemo(() => {
@@ -53,8 +52,9 @@ export default function App() {
   const openFileAt = (p: string) => {
     window.piwork.readFile(p).then((f) => { setOpenFile(f); b.setArtifactsOpen(true); });
   };
-  // Files/open-file are session-scoped; clear when the session ends.
-  useEffect(() => { if (!inSession) { setFilesOpen(false); setOpenFile(null); } }, [inSession]);
+  // The drawer's open/closed persists across home ↔ folder ↔ session; only the previewed
+  // file is context-specific, so clear it when the session context changes.
+  useEffect(() => { setOpenFile(null); }, [inSession]);
 
   // Rail items shared by both contexts (bottom group).
   const railBottom: RailItem[] = [
@@ -70,7 +70,7 @@ export default function App() {
     { key: "rewind", icon: "⏪", label: "Rewind", disabled: b.streaming, active: b.treeOpen, title: b.streaming ? "Rewind is available when the agent is idle" : "Rewind — jump back to an earlier point", onClick: b.openSessionTree },
   ];
   const homeRailTop: RailItem[] = [
-    { key: "files", icon: "📁", label: "Files", title: "Browse folders — pick where to start a sandbox", active: homeFilesOpen, onClick: () => setHomeFilesOpen((v) => !v) },
+    { key: "files", icon: "📁", label: "Files", title: "Browse folders — pick where to start a sandbox", active: filesOpen, onClick: () => setFilesOpen((v) => !v) },
     { key: "skills", icon: "🧩", label: "Skills", title: "Global skills, plugins & extensions", onClick: () => r.openFor("global") },
     { key: "connect", icon: "🔌", label: "Connect", title: "Global MCP connectors (Slack, Notion, …)", onClick: () => c.openFor("global") },
   ];
@@ -117,13 +117,13 @@ export default function App() {
       ) : (
         <div className="app-row">
           <ActivityRail top={homeRailTop} bottom={railBottom} />
-          {homeFilesOpen && (
+          {filesOpen && (
             <FilesPanel
               initialDir={b.launcherFolder ?? ""}
               openPath={openFile?.path ?? null}
               onOpenFile={(p) => window.piwork.readFile(p).then(setOpenFile)}
-              onOpenFolder={(folder) => { b.selectFolder(folder); setHomeFilesOpen(false); }}
-              onClose={() => setHomeFilesOpen(false)}
+              onOpenFolder={(folder) => b.selectFolder(folder)}
+              onClose={() => setFilesOpen(false)}
             />
           )}
           <Launcher
@@ -398,6 +398,8 @@ function FilesPanel(props: {
   const rootLabel = props.floor ? basename(props.floor) : "/";
   const rootDir = props.floor ?? "/";
   const tail = absParts.slice(floorLen);
+  const canUp = absParts.length > floorLen;
+  const goUp = () => { if (canUp) setDir("/" + absParts.slice(0, -1).join("/")); };
   return (
     <div className="files-panel">
       <header>
@@ -413,6 +415,7 @@ function FilesPanel(props: {
       )}
       {dir && (
         <div className="files-crumb">
+          <button className="crumb-up" disabled={!canUp} onClick={goUp} title="Up one level">↑</button>
           <button className="link" disabled={dir === rootDir} onClick={() => setDir(rootDir)}>{rootLabel}</button>
           {tail.map((s, i) => (
             <span key={i}>

@@ -35,6 +35,9 @@ body {
 .open-folder { margin: 8px; text-align: center; }
 .files-crumb { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 6px 10px; border-bottom: 1px solid var(--border); font-size: 12px; }
 .files-crumb .link { padding: 0 2px; }
+.crumb-up { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; color: var(--fg); font-size: 12px; line-height: 1; padding: 3px 7px; margin-right: 4px; cursor: pointer; }
+.crumb-up:hover:not(:disabled) { border-color: var(--accent); }
+.crumb-up:disabled { opacity: 0.35; cursor: default; }
 .files-crumb .link:disabled { color: var(--fg); opacity: 1; cursor: default; }
 .crumb-sep { color: var(--muted); }
 .files-list { flex: 1; overflow-y: auto; padding: 4px; }
