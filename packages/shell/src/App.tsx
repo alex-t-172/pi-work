@@ -14,6 +14,7 @@ const SUITE_PRESETS = [
   { name: "Artifacts", source: "/opt/piwork-suite/piwork-artifacts", dir: "piwork-artifacts", desc: "Auto-preview files written to .artifacts/ (HTML/Markdown/text)" },
   { name: "Tasks", source: "/opt/piwork-suite/piwork-tasks", dir: "piwork-tasks", desc: "A task list the agent maintains, shown as a docked widget" },
   { name: "Ask", source: "/opt/piwork-suite/piwork-ask", dir: "piwork-ask", desc: "Lets the agent ask you a question (choice / yes-no / text) mid-turn" },
+  { name: "Renderers", source: "/opt/piwork-suite/piwork-renderers", dir: "piwork-renderers", desc: "Extra file renderers for the viewer (CSV/TSV → table) — richer than the built-in text view" },
 ];
 
 // MCP connector presets: each yields a stdio server + one or more secret env fields.
@@ -48,9 +49,16 @@ export default function App() {
   const showArtifacts = inSession && b.artifactsOpen && (artifactCount > 0 || openFile !== null);
   const filesRoot = b.activeFolder;
 
-  // Open a workspace file in the viewer pane (host-side read; no agent involved).
+  // Open a workspace file in the viewer pane. Always show the base (host-side) view
+  // instantly; if a session is running and idle, also ask an extension file-renderer to
+  // produce a richer view (arrives as an artifact the viewer auto-selects). Falls back to
+  // the base view when no renderer matches (silent) or offline.
   const openFileAt = (p: string) => {
     window.piwork.readFile(p).then((f) => { setOpenFile(f); b.setArtifactsOpen(true); });
+    if (inSession && !b.globalMode && !b.streaming && b.activeFolder && p.startsWith(b.activeFolder)) {
+      const rel = p.slice(b.activeFolder.length).replace(/^\/+/, "");
+      if (rel) window.piwork.send({ type: "prompt", message: `/piwork-render-file ${rel}` });
+    }
   };
   // The drawer's open/closed persists across home ↔ folder ↔ session; only the previewed
   // file is context-specific, so clear it when the session context changes.

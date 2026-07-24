@@ -84,6 +84,30 @@ Then `/piwork-reload`.
 Tool `parameters` is plain JSON Schema. `execute` returns `{ content: [{type:"text",text}], details }`;
 throw on failure.
 
+### Custom file renderers (make the viewer understand a filetype)
+
+The document viewer natively shows text, markdown, images and HTML. To teach it a *new*
+filetype (CSV, a log format, a config, …), register a **file renderer**: you can't inject
+UI code (the viewer is sandboxed), so you transform the file into HTML/markdown — an
+artifact — and the base viewer renders it. Register at load time on the Piwork global:
+
+```ts
+export default function (_pi) {
+  const g = globalThis; // Piwork exposes __piwork in the container
+  g.__piwork?.registerFileRenderer({
+    id: "my-logs",
+    label: "Log view",
+    extensions: [".log"],                 // or match: (relPath) => boolean
+    render: ({ path, text, absPath }) => ({ html: `<pre>${text()}</pre>` }),
+  });
+}
+```
+
+When the user opens a matching file in the workspace browser, Piwork shows your rendered
+view (they can still switch back to the raw text). `render` runs in-container, may be async,
+and returns `{ html }` or `{ markdown }`. Keep output self-contained (inline styles; no
+network — the viewer's CSP blocks it).
+
 ## Scope: project vs global
 
 - **Project** (`/workspace/.pi/…`) — applies to this project only; travels with the repo. Default.

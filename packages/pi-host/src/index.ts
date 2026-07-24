@@ -155,9 +155,55 @@ function trimTreeNode(node: any): any {
   };
 }
 
+// ── File-renderer contract ────────────────────────────────────────────────────────
+// The renderer UI is sandboxed, so extensions can't inject render code. Instead they
+// TRANSFORM a file into an artifact (html/markdown) that the base viewer renders. An
+// extension registers a renderer on a well-known global (same in-process embed as the
+// "own the shim" pattern); the base /piwork-render-file command dispatches to it and emits
+// the result as an artifact. Renderers should register at load time (in their factory).
+interface PiworkFileRenderer {
+  id: string;
+  label?: string;
+  extensions?: string[]; // e.g. [".csv"] — matched case-insensitively
+  match?: (relPath: string) => boolean; // or full control
+  render: (input: { path: string; absPath: string; text: () => string }) =>
+    { html?: string; markdown?: string } | Promise<{ html?: string; markdown?: string }>;
+}
+const piworkGlobal = globalThis as unknown as {
+  __piwork?: { fileRenderers: PiworkFileRenderer[]; registerFileRenderer: (r: PiworkFileRenderer) => void };
+};
+if (!piworkGlobal.__piwork) {
+  const fileRenderers: PiworkFileRenderer[] = [];
+  piworkGlobal.__piwork = { fileRenderers, registerFileRenderer: (r) => fileRenderers.push(r) };
+}
+
 const piworkBaseExtension = (pi: {
   registerCommand: (name: string, opts: { description: string; handler: (args: string, ctx: any) => Promise<void> }) => void;
 }) => {
+  // Render a workspace file through a registered file renderer (→ artifact). Silent no-op
+  // when nothing matches: the shell has already shown the base (raw) view.
+  pi.registerCommand("piwork-render-file", {
+    description: "Render a workspace file into the viewer via a registered file renderer",
+    handler: async (args, ctx) => {
+      const rel = args.trim();
+      if (!rel) return;
+      const ext = nodePath.extname(rel).toLowerCase();
+      const renderer = (piworkGlobal.__piwork?.fileRenderers ?? []).find(
+        (r) => (r.match?.(rel) ?? false) || (r.extensions?.some((e) => e.toLowerCase() === ext) ?? false),
+      );
+      if (!renderer) return;
+      const absPath = nodePath.isAbsolute(rel) ? rel : nodePath.join(cwd, rel);
+      try {
+        const out = await renderer.render({ path: rel, absPath, text: () => fs.readFileSync(absPath, "utf8") });
+        if (out?.html || out?.markdown) {
+          ctx.ui.showArtifact({ key: `file:${rel}`, title: `${nodePath.basename(rel)} (rendered)`, html: out.html, markdown: out.markdown });
+        }
+      } catch (e) {
+        ctx.ui.notify(`Couldn't render ${nodePath.basename(rel)}: ${e instanceof Error ? e.message : String(e)}`, "warning");
+      }
+    },
+  });
+
   pi.registerCommand("piwork-reload", {
     description: "Reload Piwork skills, extensions & connectors without ending the session",
     handler: async (_args, ctx) => {
