@@ -471,8 +471,28 @@ const createRuntime: CreateAgentSessionRuntimeFactory = async ({ cwd, sessionMan
   };
 };
 
+// Initialize Pi's TUI theme singleton. Pi's theme is a globalThis-keyed singleton that
+// THROWS "Theme not initialized" on any access before initTheme() runs. Interactive/TUI
+// mode calls this; our headless RPC embed doesn't — but extensions that render status/UI
+// (e.g. pi-mcp-adapter's status bar) still touch the theme and would crash the session.
+// The package's `exports` map blocks the deep specifier, so import the file by ABSOLUTE
+// path (allowed) — and since the theme lives on globalThis, this sets the value every
+// module instance reads. Defensive: a failure just means we skip it.
+async function initPiTheme(): Promise<void> {
+  try {
+    const entry = fileURLToPath(import.meta.resolve("@earendil-works/pi-coding-agent")); // …/dist/index.js
+    const themePath = nodePath.join(nodePath.dirname(entry), "modes/interactive/theme/theme.js");
+    const mod = (await import(themePath)) as { initTheme?: (name?: string, watch?: boolean) => void };
+    mod.initTheme?.(undefined, false); // no file watcher in a container
+    console.error("[pi-host] theme initialized (for extension status UI)");
+  } catch (e) {
+    console.error("[pi-host] theme init skipped:", e instanceof Error ? e.message : String(e));
+  }
+}
+
 async function main() {
   console.error(`[pi-host] starting; cwd=${cwd} agentDir=${getAgentDir()}`);
+  await initPiTheme();
   const runtime = await createAgentSessionRuntime(createRuntime, {
     cwd,
     agentDir: getAgentDir(),
