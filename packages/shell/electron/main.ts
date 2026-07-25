@@ -224,10 +224,11 @@ async function startSessionFor(workspace: string, session?: string, opts?: { glo
       image: IMAGE,
       addHostGateway: DEV_ADD_HOST_GATEWAY,
       ...mount,
-      extraDockerArgs: [...suiteMountArgs, ...shareAgentsArgs(), ...connectorsMountArgs()],
+      extraDockerArgs: [...suiteMountArgs, ...shareAgentsArgs(), ...mcpMountArgs()],
       env: {
         PIWORK_SESSION_DIR: sessionDirFor(workspace),
         PIWORK_WS_KEY: hash(workspace),
+        MCP_OAUTH_CALLBACK_PORT: String(MCP_CALLBACK_PORT), // adapter's in-container listener (vestigial); we catch on the host
         ...(session ? { PIWORK_SESSION: session } : {}),
         // Global console: chat-only (no filesystem tools) + purpose-built config-authoring
         // tools scoped to the agent store's skills/ & extensions/ (Pi's native global-scan
@@ -397,38 +398,111 @@ ipcMain.handle("piwork:readFile", async (_e, filePath: string) => {
   }
 });
 
-// ── MCP connectors ───────────────────────────────────────────────────────────────
-// Config lives host-side (secrets never in a repo) and is mounted read-only into the
-// sandbox at /root/.piwork-connectors: global.json + proj-<wsKey>.json.
-const CONNECTORS_DIR = path.join(os.homedir(), ".piwork", "connectors");
-function connectorsMountArgs(): string[] {
-  try { fs.mkdirSync(CONNECTORS_DIR, { recursive: true }); } catch { /* ignore */ }
-  return ["-v", `${CONNECTORS_DIR}:/root/.piwork-connectors:ro`];
-}
-function connectorsFile(scope: "global" | "project", folder?: string): string {
-  fs.mkdirSync(CONNECTORS_DIR, { recursive: true });
-  return scope === "project" && folder ? path.join(CONNECTORS_DIR, `proj-${hash(folder)}.json`) : path.join(CONNECTORS_DIR, "global.json");
-}
-function readConnectors(scope: "global" | "project", folder?: string): { servers: unknown[] } {
-  try { return JSON.parse(fs.readFileSync(connectorsFile(scope, folder), "utf8")); } catch { return { servers: [] }; }
-}
-let connectorsEngineEnsured = false;
-async function ensureConnectorsEngine(): Promise<void> {
-  if (connectorsEngineEnsured) return;
-  // Idempotent: make sure the piwork-connectors extension is installed globally so config takes effect.
-  await runPi("", ["install", "/opt/piwork-suite/piwork-connectors"]);
-  connectorsEngineEnsured = true;
+// ── MCP connectors (pi-mcp-adapter) ────────────────────────────────────────────────
+// Connectors are standard MCP servers described in mcp.json, read by the baked
+// pi-mcp-adapter. We manage those files host-side and drive the adapter's OAuth from here:
+//   • Global config → ~/.piwork/mcp-global/mcp.json, mounted at /root/.config/mcp (a path
+//     the adapter reads as user-global) so it applies in every session.
+//   • Project config → <workspace>/.pi/mcp.json (the adapter's project path; in-repo &
+//     portable, like Claude/Cursor .mcp.json — it holds no secrets, tokens live elsewhere).
+//   • OAuth tokens are stored by the adapter under the agent volume (persist across sessions).
+// Seamless OAuth: each oauth server's redirectUri is pinned to a fixed localhost port; the
+// browser (on the host) redirects there and OUR host callback server catches it, then tells
+// pi-host to finish — so no copy/paste, and we never depend on the adapter's in-container
+// callback listener (unreachable from the host browser).
+const MCP_CALLBACK_PORT = Number(process.env.PIWORK_MCP_CALLBACK_PORT ?? 51823);
+const MCP_REDIRECT_URI = `http://localhost:${MCP_CALLBACK_PORT}/callback`;
+const MCP_GLOBAL_DIR = path.join(os.homedir(), ".piwork", "mcp-global");
+function mcpMountArgs(): string[] {
+  try { fs.mkdirSync(MCP_GLOBAL_DIR, { recursive: true }); } catch { /* ignore */ }
+  return ["-v", `${MCP_GLOBAL_DIR}:/root/.config/mcp`];
 }
 
-ipcMain.handle("piwork:getConnectors", (_e, scope: "global" | "project", folder?: string) => readConnectors(scope, folder));
-ipcMain.handle("piwork:setConnectors", async (_e, scope: "global" | "project", folder: string | undefined, config: { servers: unknown[] }) => {
+interface McpServer {
+  name: string; label?: string; url?: string; auth?: "oauth" | "bearer";
+  command?: string; args?: string[]; headers?: Record<string, string>;
+}
+function mcpConfigPath(scope: "global" | "project", folder?: string): string {
+  if (scope === "project" && folder) return path.join(folder, ".pi", "mcp.json");
+  return path.join(MCP_GLOBAL_DIR, "mcp.json");
+}
+function readMcpServers(scope: "global" | "project", folder?: string): { servers: McpServer[] } {
   try {
-    fs.writeFileSync(connectorsFile(scope, folder), JSON.stringify(config, null, 2));
-    if ((config.servers ?? []).length > 0) await ensureConnectorsEngine();
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    const raw = JSON.parse(fs.readFileSync(mcpConfigPath(scope, folder), "utf8"));
+    const map = raw.mcpServers ?? {};
+    const servers: McpServer[] = Object.entries<any>(map).map(([name, def]) => ({
+      name, label: def.label, url: def.url, auth: def.auth, command: def.command, args: def.args, headers: def.headers,
+    }));
+    return { servers };
+  } catch { return { servers: [] }; }
+}
+function writeMcpServers(scope: "global" | "project", folder: string | undefined, servers: McpServer[]): void {
+  const mcpServers: Record<string, any> = {};
+  for (const s of servers) {
+    const entry: any = {};
+    if (s.label) entry.label = s.label;
+    if (s.url) entry.url = s.url;
+    if (s.command) entry.command = s.command;
+    if (s.args?.length) entry.args = s.args;
+    if (s.headers && Object.keys(s.headers).length) entry.headers = s.headers;
+    if (s.auth) entry.auth = s.auth;
+    // Pin the redirect to our host callback port so browser OAuth returns seamlessly.
+    if (s.auth === "oauth") entry.oauth = { redirectUri: MCP_REDIRECT_URI };
+    mcpServers[s.name] = entry;
   }
+  const file = mcpConfigPath(scope, folder);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify({ mcpServers }, null, 2));
+}
+
+ipcMain.handle("piwork:getMcpServers", (_e, scope: "global" | "project", folder?: string) => readMcpServers(scope, folder));
+ipcMain.handle("piwork:setMcpServers", (_e, scope: "global" | "project", folder: string | undefined, servers: McpServer[]) => {
+  try { writeMcpServers(scope, folder, servers); return { ok: true }; }
+  catch (err) { return { ok: false, error: err instanceof Error ? err.message : String(err) }; }
+});
+
+// Host-side OAuth callback server: the browser redirect lands here (on the host), and we
+// hand the full redirect URL to pi-host to finish the flow. One connect in flight at a time.
+let mcpCallbackServer: import("node:http").Server | undefined;
+let pendingMcpAuth: { server: string } | undefined;
+function ensureMcpCallbackServer(): void {
+  if (mcpCallbackServer) return;
+  // Lazy require so we don't pull http unless connectors are used.
+  const http = require("node:http") as typeof import("node:http");
+  mcpCallbackServer = http.createServer((req, res) => {
+    const url = req.url ?? "/";
+    if (!url.startsWith("/callback")) { res.writeHead(404); res.end(); return; }
+    const fullUrl = `http://localhost:${MCP_CALLBACK_PORT}${url}`;
+    const server = pendingMcpAuth?.server;
+    pendingMcpAuth = undefined;
+    res.writeHead(200, { "content-type": "text/html" });
+    res.end("<!doctype html><meta charset=utf-8><body style=\"font:15px -apple-system,sans-serif;padding:40px;text-align:center\"><h2>Connected ✓</h2><p>You can close this tab and return to Piwork.</p></body>");
+    if (server && bridge) {
+      log(`mcp oauth: callback for ${server}, completing`);
+      bridge.send({ type: "prompt", message: `/piwork-mcp-complete ${server} ${fullUrl}` });
+    } else {
+      log(`mcp oauth: callback with no pending server/bridge (server=${server})`);
+    }
+  });
+  mcpCallbackServer.on("error", (e) => log(`mcp callback server error: ${String(e)}`));
+  mcpCallbackServer.listen(MCP_CALLBACK_PORT, "127.0.0.1", () => log(`mcp callback server on ${MCP_REDIRECT_URI}`));
+}
+
+ipcMain.handle("piwork:mcpConnect", (_e, server: string) => {
+  if (!bridge) return { ok: false, error: "Start a session to connect this connector." };
+  ensureMcpCallbackServer();
+  pendingMcpAuth = { server };
+  bridge.send({ type: "prompt", message: `/piwork-mcp-auth ${server}` });
+  return { ok: true };
+});
+ipcMain.handle("piwork:mcpLogout", (_e, server: string) => {
+  if (!bridge) return { ok: false, error: "Start a session to manage this connector." };
+  bridge.send({ type: "prompt", message: `/piwork-mcp-logout ${server}` });
+  return { ok: true };
+});
+ipcMain.handle("piwork:mcpRefreshStatus", () => {
+  if (bridge) bridge.send({ type: "prompt", message: "/piwork-mcp-status" });
+  return { ok: !!bridge };
 });
 
 // Theme persistence (host-side file so it survives restarts and dev/prod origins).

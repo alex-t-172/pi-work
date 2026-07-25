@@ -25,8 +25,11 @@ export interface PiworkApi {
   reloadSession(): Promise<{ ok: boolean; error?: string }>;
   getConfig(): Promise<{ shareAgentsDir?: boolean }>;
   setConfig(patch: Record<string, unknown>): Promise<{ shareAgentsDir?: boolean }>;
-  getConnectors(scope: "global" | "project", folder?: string): Promise<{ servers: ConnectorServer[] }>;
-  setConnectors(scope: "global" | "project", folder: string | undefined, config: { servers: ConnectorServer[] }): Promise<{ ok: boolean; error?: string }>;
+  getMcpServers(scope: "global" | "project", folder?: string): Promise<{ servers: McpServer[] }>;
+  setMcpServers(scope: "global" | "project", folder: string | undefined, servers: McpServer[]): Promise<{ ok: boolean; error?: string }>;
+  mcpConnect(server: string): Promise<{ ok: boolean; error?: string }>;
+  mcpLogout(server: string): Promise<{ ok: boolean; error?: string }>;
+  mcpRefreshStatus(): Promise<{ ok: boolean }>;
   send(command: Record<string, unknown>): void;
   respondUi(response: Record<string, unknown>): void;
   onMessage(listener: (msg: { channel: string; payload: unknown }) => void): () => void;
@@ -76,17 +79,21 @@ export interface TreeNode {
   children: TreeNode[];
 }
 
-export interface ConnectorServer {
-  id: string;
+// An MCP connector as stored in mcp.json (read by pi-mcp-adapter). `name` is the adapter's
+// server key (tokens are keyed by it). Remote (url) servers can use OAuth; stdio (command)
+// servers are the advanced/local path.
+export interface McpServer {
+  name: string;
   label?: string;
-  transport: "stdio" | "http";
+  url?: string;
+  auth?: "oauth" | "bearer";
   command?: string;
   args?: string[];
-  env?: Record<string, string>;
-  url?: string;
   headers?: Record<string, string>;
-  enabled?: boolean;
 }
+export type McpAuthStatus = "authenticated" | "expired" | "not_authenticated" | "n/a";
+export interface McpStatusEntry { name: string; oauth: boolean; status: McpAuthStatus }
+export interface McpStatus { servers: McpStatusEntry[] }
 
 export interface ResourceItem {
   name: string;

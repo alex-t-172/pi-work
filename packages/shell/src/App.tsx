@@ -5,22 +5,25 @@ import { useTheme } from "./useTheme.ts";
 import { useResources } from "./useResources.ts";
 import { useConnectors } from "./useConnectors.ts";
 import { PRESETS, resolveVars, THEME_TOKENS, type ThemeState, type ThemeToken } from "./theme.ts";
-import type { ChatItem, ConnectorServer, DirEntry, FileContent, LoginState, PackageItem, ResourceItem, ResourceList, SessionMeta, UiDialog } from "./types.ts";
+import type { ChatItem, DirEntry, FileContent, LoginState, McpServer, McpStatusEntry, PackageItem, ResourceItem, ResourceList, SessionMeta, UiDialog } from "./types.ts";
 
 // Curated presets installable in one click (sources are container-side suite paths).
 const SUITE_PRESETS = [
   { name: "Checkpoint", source: "/opt/piwork-suite/piwork-checkpoint", dir: "piwork-checkpoint", desc: "Git auto-commit before each turn (safety net)" },
-  { name: "Connectors", source: "/opt/piwork-suite/piwork-connectors", dir: "piwork-connectors", desc: "Engine for MCP connectors (Slack, Notion, …) — configure via the 🔌 button" },
   { name: "Artifacts", source: "/opt/piwork-suite/piwork-artifacts", dir: "piwork-artifacts", desc: "Auto-preview files written to .artifacts/ (HTML/Markdown/text)" },
   { name: "Tasks", source: "/opt/piwork-suite/piwork-tasks", dir: "piwork-tasks", desc: "A task list the agent maintains, shown as a docked widget" },
   { name: "Ask", source: "/opt/piwork-suite/piwork-ask", dir: "piwork-ask", desc: "Lets the agent ask you a question (choice / yes-no / text) mid-turn" },
   { name: "Renderers", source: "/opt/piwork-suite/piwork-renderers", dir: "piwork-renderers", desc: "Extra file renderers for the viewer (CSV/TSV → table) — richer than the built-in text view" },
 ];
 
-// MCP connector presets: each yields a stdio server + one or more secret env fields.
-const CONNECTOR_PRESETS: Array<{ id: string; label: string; command: string; args: string[]; fields: Array<{ env: string; label: string; required?: boolean; placeholder?: string }> }> = [
-  { id: "notion", label: "Notion", command: "npx", args: ["-y", "@notionhq/notion-mcp-server"], fields: [{ env: "NOTION_TOKEN", label: "Notion integration token", required: true, placeholder: "ntn_…" }] },
-  { id: "slack", label: "Slack", command: "npx", args: ["-y", "@modelcontextprotocol/server-slack"], fields: [{ env: "SLACK_BOT_TOKEN", label: "Slack bot token", required: true, placeholder: "xoxb-…" }, { env: "SLACK_TEAM_ID", label: "Team ID (optional)", placeholder: "T…" }] },
+// MCP connector presets: hosted remote MCP servers that authenticate with OAuth — click
+// Add, then Connect and authorize in the browser (no tokens to paste). Powered by the baked
+// pi-mcp-adapter, which handles the OAuth (incl. dynamic client registration) + token refresh.
+const MCP_PRESETS: Array<{ name: string; label: string; url: string; desc: string }> = [
+  { name: "notion", label: "Notion", url: "https://mcp.notion.com/mcp", desc: "Search & edit your Notion workspace" },
+  { name: "linear", label: "Linear", url: "https://mcp.linear.app/mcp", desc: "Issues, projects & cycles" },
+  { name: "sentry", label: "Sentry", url: "https://mcp.sentry.dev/mcp", desc: "Errors, issues & traces" },
+  { name: "stripe", label: "Stripe", url: "https://mcp.stripe.com", desc: "Payments & billing data" },
 ];
 
 marked.setOptions({ breaks: true, gfm: true });
@@ -172,7 +175,7 @@ export default function App() {
         />
       )}
       {r.open && <ResourcesModal r={r} inSession={inSession} onClose={r.close} />}
-      {c.open && <ConnectorsModal c={c} inSession={inSession} onClose={c.close} />}
+      {c.open && <ConnectorsModal c={c} inSession={inSession} status={b.mcpStatus} onClose={c.close} />}
       {b.dialog && <DialogModal dialog={b.dialog} onRespond={b.respondDialog} />}
       {inSession && b.treeOpen && b.sessionTree && (
         <SessionTreePanel data={b.sessionTree} rewinding={b.rewinding} busy={b.streaming} onRewind={b.rewindTo} onClose={() => b.setTreeOpen(false)} />
@@ -1074,27 +1077,30 @@ function slugify(s: string): string {
 
 type KV = { k: string; v: string };
 
-function CustomConnectorForm(props: { existingIds: string[]; onSave: (s: ConnectorServer) => void; onCancel: () => void }) {
+// Add a connector the presets don't cover: a remote MCP URL (OAuth or a bearer/header token),
+// or an advanced local stdio command.
+function CustomConnectorForm(props: { onSave: (s: McpServer) => void; onCancel: () => void }) {
   const [label, setLabel] = useState("");
-  const [transport, setTransport] = useState<"stdio" | "http">("stdio");
+  const [kind, setKind] = useState<"remote" | "local">("remote");
+  const [url, setUrl] = useState("");
+  const [remoteAuth, setRemoteAuth] = useState<"oauth" | "token">("oauth");
   const [command, setCommand] = useState("npx");
   const [argsText, setArgsText] = useState("");
-  const [url, setUrl] = useState("");
   const [pairs, setPairs] = useState<KV[]>([{ k: "", v: "" }]);
 
   const setPair = (i: number, patch: Partial<KV>) => setPairs((p) => p.map((row, idx) => (idx === i ? { ...row, ...patch } : row)));
   const addPair = () => setPairs((p) => [...p, { k: "", v: "" }]);
   const removePair = (i: number) => setPairs((p) => p.filter((_, idx) => idx !== i));
 
-  const valid = label.trim() && (transport === "stdio" ? command.trim() : url.trim());
+  const valid = label.trim() && (kind === "remote" ? url.trim() : command.trim());
 
   const save = () => {
-    const id = slugify(label);
+    const name = slugify(label);
     const kv: Record<string, string> = {};
     for (const { k, v } of pairs) if (k.trim()) kv[k.trim()] = v;
-    const server: ConnectorServer = transport === "stdio"
-      ? { id, label: label.trim(), transport: "stdio", command: command.trim(), args: argsText.split(/\s+/).filter(Boolean), env: kv, enabled: true }
-      : { id, label: label.trim(), transport: "http", url: url.trim(), headers: kv, enabled: true };
+    const server: McpServer = kind === "remote"
+      ? { name, label: label.trim(), url: url.trim(), auth: remoteAuth === "oauth" ? "oauth" : "bearer", ...(remoteAuth === "token" && Object.keys(kv).length ? { headers: kv } : {}) }
+      : { name, label: label.trim(), command: command.trim(), args: argsText.split(/\s+/).filter(Boolean) };
     props.onSave(server);
   };
 
@@ -1102,53 +1108,69 @@ function CustomConnectorForm(props: { existingIds: string[]; onSave: (s: Connect
     <div className="connector-form">
       <label className="conn-field"><span>Name</span><input placeholder="My MCP server" value={label} onChange={(e) => setLabel(e.target.value)} /></label>
       <div className="conn-transport">
-        <label><input type="radio" checked={transport === "stdio"} onChange={() => setTransport("stdio")} /> Local command (stdio)</label>
-        <label><input type="radio" checked={transport === "http"} onChange={() => setTransport("http")} /> Remote URL (HTTP)</label>
+        <label><input type="radio" checked={kind === "remote"} onChange={() => setKind("remote")} /> Remote server (URL)</label>
+        <label><input type="radio" checked={kind === "local"} onChange={() => setKind("local")} /> Local command (advanced)</label>
       </div>
-      {transport === "stdio" ? (
+      {kind === "remote" ? (
+        <>
+          <label className="conn-field"><span>Server URL</span><input placeholder="https://mcp.example.com/mcp" value={url} onChange={(e) => setUrl(e.target.value)} /></label>
+          <div className="conn-transport">
+            <label><input type="radio" checked={remoteAuth === "oauth"} onChange={() => setRemoteAuth("oauth")} /> Sign in with OAuth</label>
+            <label><input type="radio" checked={remoteAuth === "token"} onChange={() => setRemoteAuth("token")} /> Header token</label>
+          </div>
+          {remoteAuth === "token" && (
+            <div className="conn-field"><span>Headers</span>
+              {pairs.map((row, i) => (
+                <div key={i} className="kv-row">
+                  <input placeholder="Authorization" value={row.k} onChange={(e) => setPair(i, { k: e.target.value })} />
+                  <input type="password" placeholder="Bearer …" value={row.v} onChange={(e) => setPair(i, { v: e.target.value })} />
+                  <button className="secondary" onClick={() => removePair(i)} title="Remove">✕</button>
+                </div>
+              ))}
+              <button className="link" onClick={addPair}>+ add</button>
+            </div>
+          )}
+        </>
+      ) : (
         <>
           <label className="conn-field"><span>Command</span><input placeholder="npx" value={command} onChange={(e) => setCommand(e.target.value)} /></label>
           <label className="conn-field"><span>Arguments</span><input placeholder="-y @scope/mcp-server" value={argsText} onChange={(e) => setArgsText(e.target.value)} /></label>
         </>
-      ) : (
-        <label className="conn-field"><span>Server URL</span><input placeholder="https://mcp.example.com/mcp" value={url} onChange={(e) => setUrl(e.target.value)} /></label>
       )}
-      <div className="conn-field"><span>{transport === "stdio" ? "Environment variables (tokens)" : "Headers"}</span>
-        {pairs.map((row, i) => (
-          <div key={i} className="kv-row">
-            <input placeholder={transport === "stdio" ? "SOME_TOKEN" : "Authorization"} value={row.k} onChange={(e) => setPair(i, { k: e.target.value })} />
-            <input type="password" placeholder="value" value={row.v} onChange={(e) => setPair(i, { v: e.target.value })} />
-            <button className="secondary" onClick={() => removePair(i)} title="Remove">✕</button>
-          </div>
-        ))}
-        <button className="link" onClick={addPair}>+ add</button>
-      </div>
       <div className="modal-actions">
-        <button disabled={!valid} onClick={save}>Save</button>
+        <button disabled={!valid} onClick={save}>Add</button>
         <button className="secondary" onClick={props.onCancel}>Cancel</button>
       </div>
     </div>
   );
 }
 
-function ConnectorsModal(props: { c: ReturnType<typeof useConnectors>; inSession: boolean; onClose: () => void }) {
+function ConnectorsModal(props: { c: ReturnType<typeof useConnectors>; inSession: boolean; status: McpStatusEntry[]; onClose: () => void }) {
   const { c } = props;
   const isGlobal = c.mode === "global";
-  const [adding, setAdding] = useState<string | null>(null); // preset id being configured
-  const [fields, setFields] = useState<Record<string, string>>({});
-  const preset = CONNECTOR_PRESETS.find((p) => p.id === adding);
+  const [customOpen, setCustomOpen] = useState(false);
+  const statusOf = (name: string) => props.status.find((s) => s.name === name);
+  const configuredNames = new Set(c.servers.map((s) => s.name));
 
-  const startAdd = (id: string) => { setAdding(id); setFields({}); };
-  const saveAdd = () => {
-    if (!preset) return;
-    const env: Record<string, string> = {};
-    for (const f of preset.fields) if (fields[f.env]?.trim()) env[f.env] = fields[f.env].trim();
-    const server: ConnectorServer = { id: preset.id, label: preset.label, transport: "stdio", command: preset.command, args: preset.args, env, enabled: true };
-    c.upsert(server);
-    setAdding(null);
-    setFields({});
+  // A connector row: shows connection state + Connect/Disconnect (OAuth) and Remove.
+  const Row = ({ s }: { s: McpServer }) => {
+    const st = statusOf(s.name);
+    const isOauth = s.auth === "oauth" || (st?.oauth ?? false);
+    const connected = st?.status === "authenticated";
+    const expired = st?.status === "expired";
+    return (
+      <div className="res-row">
+        <div className="res-main">
+          <span className="res-name">{s.label ?? s.name}</span>
+          <span className="res-desc">{s.url ?? s.command ?? ""}{isOauth ? (connected ? " · connected" : expired ? " · session expired" : " · not connected") : s.auth === "bearer" ? " · token" : ""}</span>
+        </div>
+        {isOauth && (connected
+          ? <button className="secondary" disabled={!props.inSession} onClick={() => c.disconnect(s.name)}>Disconnect</button>
+          : <button className="primary" disabled={!props.inSession} title={props.inSession ? "Authorize in your browser" : "Start a session to connect"} onClick={() => c.connect(s.name)}>{expired ? "Reconnect" : "Connect"}</button>)}
+        <button className="secondary" onClick={() => c.remove(s.name)}>Remove</button>
+      </div>
+    );
   };
-  const missingRequired = preset ? preset.fields.some((f) => f.required && !fields[f.env]?.trim()) : false;
 
   return (
     <div className="modal-backdrop" onClick={props.onClose}>
@@ -1156,7 +1178,7 @@ function ConnectorsModal(props: { c: ReturnType<typeof useConnectors>; inSession
         <div className="modal-topbar">
           <div>
             <div className="modal-title">{isGlobal ? "Global connectors" : "Project connectors"}</div>
-            <div className="muted">{isGlobal ? "MCP servers available in every project" : `${basename(c.folder ?? "")} — this project only`}</div>
+            <div className="muted">{isGlobal ? "MCP servers available in every session" : `${basename(c.folder ?? "")} — this project only`}</div>
           </div>
           <div className="spacer" />
           {c.dirty && props.inSession && <button className="primary" onClick={c.reload}>Reload to apply</button>}
@@ -1166,54 +1188,29 @@ function ConnectorsModal(props: { c: ReturnType<typeof useConnectors>; inSession
         <div className="modal-scroll">
         {c.error && <div className="res-error">{c.error}</div>}
         {c.busy && <Loading label={c.busy} />}
+        {!props.inSession && <div className="muted" style={{ marginBottom: 10 }}>Add connectors here anytime. Start a session to connect (sign in) and use them.</div>}
 
         {c.servers.length > 0 && (
           <>
             <div className="theme-section">Configured</div>
-            {c.servers.map((s) => (
-              <div key={s.id} className="res-row">
-                <label className="tune-row" style={{ flex: 1 }}>
-                  <input type="checkbox" checked={s.enabled !== false} onChange={() => c.toggle(s.id)} />
-                  <span className="res-name">{s.label ?? s.id}</span>
-                </label>
-                <button className="secondary" onClick={() => c.removeServer(s.id)}>Remove</button>
-              </div>
-            ))}
+            {c.servers.map((s) => <Row key={s.name} s={s} />)}
           </>
         )}
 
         <div className="theme-section">Add a connector</div>
-        {adding === "__custom__" ? (
-          <CustomConnectorForm
-            existingIds={c.servers.map((s) => s.id)}
-            onSave={(server) => { c.upsert(server); setAdding(null); }}
-            onCancel={() => setAdding(null)}
-          />
-        ) : adding ? (
-          <div className="connector-form">
-            <div className="res-name">{preset?.label}</div>
-            {preset?.fields.map((f) => (
-              <label key={f.env} className="conn-field">
-                <span>{f.label}</span>
-                <input type="password" placeholder={f.placeholder} value={fields[f.env] ?? ""} onChange={(e) => setFields((v) => ({ ...v, [f.env]: e.target.value }))} />
-              </label>
-            ))}
-            <div className="modal-actions">
-              <button disabled={missingRequired} onClick={saveAdd}>Save</button>
-              <button className="secondary" onClick={() => setAdding(null)}>Cancel</button>
-            </div>
-          </div>
+        {customOpen ? (
+          <CustomConnectorForm onSave={(server) => { c.add(server); setCustomOpen(false); }} onCancel={() => setCustomOpen(false)} />
         ) : (
           <div className="preset-list">
-            {CONNECTOR_PRESETS.map((p) => (
-              <div key={p.id} className="res-row">
-                <div className="res-main"><span className="res-name">{p.label}</span><span className="res-desc">Needs {p.fields.filter((f) => f.required).map((f) => f.label).join(", ")}</span></div>
-                <button onClick={() => startAdd(p.id)}>{c.servers.some((s) => s.id === p.id) ? "Reconfigure" : "Add"}</button>
+            {MCP_PRESETS.filter((p) => !configuredNames.has(p.name)).map((p) => (
+              <div key={p.name} className="res-row">
+                <div className="res-main"><span className="res-name">{p.label}</span><span className="res-desc">{p.desc}</span></div>
+                <button onClick={() => c.add({ name: p.name, label: p.label, url: p.url, auth: "oauth" })}>Add</button>
               </div>
             ))}
             <div className="res-row">
-              <div className="res-main"><span className="res-name">Custom…</span><span className="res-desc">Any MCP server — a local command or a remote URL</span></div>
-              <button onClick={() => setAdding("__custom__")}>Add</button>
+              <div className="res-main"><span className="res-name">Custom…</span><span className="res-desc">Any MCP server — a remote URL or a local command</span></div>
+              <button onClick={() => setCustomOpen(true)}>Add</button>
             </div>
           </div>
         )}

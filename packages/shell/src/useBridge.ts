@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ChatItem, Connection, LoginState, ModelInfo, SessionMeta, Toast, TreeNode, UiDialog } from "./types.ts";
+import type { ChatItem, Connection, LoginState, McpStatusEntry, ModelInfo, SessionMeta, Toast, TreeNode, UiDialog } from "./types.ts";
 
 // Mirrors piwork-ui's PIWORK_INTENT_SENTINEL. Extensions ride richer intents on `notify`
 // until they become first-class (once we own the shim). Kept in sync by convention.
@@ -34,6 +34,7 @@ export function useBridge() {
   const [lastArtifactKey, setLastArtifactKey] = useState<string | null>(null);
   const [commands, setCommands] = useState<Array<{ name: string; description?: string; source?: string }>>([]);
   const [sessionTree, setSessionTree] = useState<{ tree: TreeNode[]; leaf: string | null } | null>(null);
+  const [mcpStatus, setMcpStatus] = useState<McpStatusEntry[]>([]);
   const [treeOpen, setTreeOpen] = useState(false);
   const [rewinding, setRewinding] = useState(false);
   const [injectedText, setInjectedText] = useState<{ text: string; nonce: number } | null>(null);
@@ -253,6 +254,9 @@ export function useBridge() {
         case "openExternal": // first-class intent (Piwork owns the shim)
           if (typeof p.url === "string") window.piwork.openExternal(p.url);
           break;
+        case "mcpStatus":
+          setMcpStatus((Array.isArray(p.servers) ? p.servers : []) as McpStatusEntry[]);
+          break;
         case "sessionTree":
           setSessionTree({ tree: (p.tree as TreeNode[]) ?? [], leaf: (p.leaf as string | null) ?? null });
           setTreeOpen(true);
@@ -465,6 +469,7 @@ export function useBridge() {
     recentFolders, launcherFolder, launcherSessions, activeFolder, globalMode, startGlobal,
     artifacts, artifactsOpen, setArtifactsOpen, lastArtifactKey, commands,
     sessionTree, treeOpen, setTreeOpen, openSessionTree, rewindTo, rewinding, injectedText,
+    mcpStatus, setMcpStatus,
     submit, abort, respondDialog, setModel,
     startLogin, chooseProvider, submitLoginInput, closeLogin,
     refreshRecent, pickFolder, selectFolder, backToFolders, startWith, endToHome, endToSessions,

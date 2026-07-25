@@ -223,6 +223,102 @@ const piworkBaseExtension = (pi: {
     handler: async (_args, ctx) => emitTree(ctx),
   });
 
+  // ── MCP connector OAuth relay ─────────────────────────────────────────────────
+  // Drive the baked pi-mcp-adapter's OAuth flow from the Piwork shell (not the model,
+  // not the adapter's TUI). The flow is split: piwork-mcp-auth calls startAuth() → we open
+  // the URL in the host browser (openExternal); the host's callback server catches the
+  // redirect and calls back with piwork-mcp-complete → completeAuthFromInput(). Both run
+  // in THIS process, so the adapter's in-memory pending-transport survives between them.
+  const mcpFlow = () => import("/opt/pi-mcp-adapter/mcp-auth-flow.ts") as Promise<any>;
+  const mcpConfig = () => import("/opt/pi-mcp-adapter/config.ts") as Promise<any>;
+  const findServer = async (name: string): Promise<{ url?: string; def: any } | null> => {
+    try {
+      const { loadMcpConfig } = await mcpConfig();
+      const cfg = loadMcpConfig(undefined, cwd);
+      const def = cfg?.mcpServers?.[name];
+      return def ? { url: def.url, def } : null;
+    } catch (e) {
+      console.error("[pi-host] mcp config load failed:", e);
+      return null;
+    }
+  };
+  const emitMcpStatus = async (ctx: any) => {
+    try {
+      const { loadMcpConfig } = await mcpConfig();
+      const { getAuthStatus, supportsOAuth } = await mcpFlow();
+      const cfg = loadMcpConfig(undefined, cwd);
+      const servers = cfg?.mcpServers ?? {};
+      const out = [] as Array<{ name: string; oauth: boolean; status: string }>;
+      for (const [name, def] of Object.entries(servers)) {
+        const oauth = !!supportsOAuth(def);
+        out.push({ name, oauth, status: oauth ? await getAuthStatus(name) : "n/a" });
+      }
+      ctx.ui.showMcpStatus?.({ servers: out });
+    } catch (e) {
+      console.error("[pi-host] mcp status failed:", e);
+    }
+  };
+
+  pi.registerCommand("piwork-mcp-auth", {
+    description: "Begin OAuth for an MCP connector (opens the browser)",
+    handler: async (args, ctx) => {
+      const name = args.trim();
+      if (!name) return;
+      const found = await findServer(name);
+      if (!found) { ctx.ui.notify(`Connector "${name}" not found`, "error"); return; }
+      try {
+        const { startAuth, supportsOAuth } = await mcpFlow();
+        if (!supportsOAuth(found.def)) { ctx.ui.notify(`"${name}" doesn't use OAuth`, "warning"); return; }
+        const { authorizationUrl } = await startAuth(name, found.url, found.def);
+        if (!authorizationUrl) { ctx.ui.notify(`"${name}" is already connected`, "info"); await emitMcpStatus(ctx); return; }
+        ctx.ui.openExternal(authorizationUrl); // host opens it; host callback server finishes
+      } catch (e) {
+        ctx.ui.notify(`Couldn't start OAuth for "${name}": ${e instanceof Error ? e.message : String(e)}`, "error");
+      }
+    },
+  });
+
+  pi.registerCommand("piwork-mcp-complete", {
+    description: "Finish MCP OAuth from the captured redirect (host-driven)",
+    handler: async (args, ctx) => {
+      // args: "<server> <redirectUrl>" — server is a single token, URL is the rest.
+      const trimmed = args.trim();
+      const sp = trimmed.indexOf(" ");
+      if (sp < 0) return;
+      const name = trimmed.slice(0, sp);
+      const redirectUrl = trimmed.slice(sp + 1).trim();
+      try {
+        const { completeAuthFromInput } = await mcpFlow();
+        await completeAuthFromInput(name, redirectUrl);
+        ctx.ui.notify(`Connected "${name}" ✓`, "info");
+        await emitMcpStatus(ctx);
+      } catch (e) {
+        ctx.ui.notify(`Couldn't finish connecting "${name}": ${e instanceof Error ? e.message : String(e)}`, "error");
+      }
+    },
+  });
+
+  pi.registerCommand("piwork-mcp-logout", {
+    description: "Disconnect an MCP connector (clear its OAuth credentials)",
+    handler: async (args, ctx) => {
+      const name = args.trim();
+      if (!name) return;
+      try {
+        const { removeAuth } = await mcpFlow();
+        await removeAuth(name);
+        ctx.ui.notify(`Disconnected "${name}"`, "info");
+        await emitMcpStatus(ctx);
+      } catch (e) {
+        ctx.ui.notify(`Couldn't disconnect "${name}": ${e instanceof Error ? e.message : String(e)}`, "warning");
+      }
+    },
+  });
+
+  pi.registerCommand("piwork-mcp-status", {
+    description: "Report MCP connector auth status to the shell",
+    handler: async (_args, ctx) => emitMcpStatus(ctx),
+  });
+
   // Rewind the conversation to an earlier entry (creates/moves to that branch).
   pi.registerCommand("piwork-rewind", {
     description: "Rewind the conversation to an earlier point by entry id",
@@ -423,6 +519,8 @@ async function main() {
     clearArtifact: (key?: string) => emitUiIntent("artifact", { key: String(key ?? "default"), clear: true }),
     // Session-tree graph for the visual navigator.
     showSessionTree: (data: { tree: unknown; leaf: string | null }) => emitUiIntent("sessionTree", { tree: data.tree, leaf: data.leaf }),
+    // MCP connector auth status for the Connectors UI.
+    showMcpStatus: (data: { servers: unknown }) => emitUiIntent("mcpStatus", { servers: data.servers }),
   });
   // Patch bindExtensions on the AgentSession PROTOTYPE so it also covers sessions created
   // by replacement (new/fork/switch), which runRpcMode rebinds automatically.
