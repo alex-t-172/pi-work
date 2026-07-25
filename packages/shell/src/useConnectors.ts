@@ -25,7 +25,7 @@ export function useConnectors() {
     setError(null);
     setDirty(false);
     await load(m, f);
-    window.piwork.mcpRefreshStatus(); // auth status arrives via the mcpStatus bridge message
+    window.piwork.mcpRefreshStatus(m, m === "project" ? f : undefined); // status arrives via mcpStatus
   }, [load]);
 
   const close = useCallback(() => setOpen(false), []);
@@ -44,22 +44,24 @@ export function useConnectors() {
 
   const connect = useCallback(async (name: string) => {
     setError(null);
-    const r = await window.piwork.mcpConnect(name);
+    setBusy(`Connecting ${name}… (a browser window will open)`);
+    const r = await window.piwork.mcpConnect(name, mode, mode === "project" ? folder : undefined);
+    setBusy(null);
     if (!r.ok) setError(r.error ?? "connect failed");
-  }, []);
+  }, [mode, folder]);
   const disconnect = useCallback(async (name: string) => {
     setError(null);
-    const r = await window.piwork.mcpLogout(name);
+    const r = await window.piwork.mcpLogout(name, mode, mode === "project" ? folder : undefined);
     if (!r.ok) setError(r.error ?? "disconnect failed");
-  }, []);
+  }, [mode, folder]);
 
   const reload = useCallback(async () => {
     setBusy("Reloading session…");
     await window.piwork.reloadSession();
     setBusy(null);
     setDirty(false);
-    window.piwork.mcpRefreshStatus();
-  }, []);
+    window.piwork.mcpRefreshStatus(mode, mode === "project" ? folder : undefined);
+  }, [mode, folder]);
 
   return { open, mode, folder, servers, busy, error, dirty, openFor, close, add, remove, connect, disconnect, reload };
 }

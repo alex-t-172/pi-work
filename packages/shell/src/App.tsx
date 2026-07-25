@@ -1165,8 +1165,8 @@ function ConnectorsModal(props: { c: ReturnType<typeof useConnectors>; inSession
           <span className="res-desc">{s.url ?? s.command ?? ""}{isOauth ? (connected ? " · connected" : expired ? " · session expired" : " · not connected") : s.auth === "bearer" ? " · token" : ""}</span>
         </div>
         {isOauth && (connected
-          ? <button className="secondary" disabled={!props.inSession} onClick={() => c.disconnect(s.name)}>Disconnect</button>
-          : <button className="primary" disabled={!props.inSession} title={props.inSession ? "Authorize in your browser" : "Start a session to connect"} onClick={() => c.connect(s.name)}>{expired ? "Reconnect" : "Connect"}</button>)}
+          ? <button className="secondary" onClick={() => c.disconnect(s.name)}>Disconnect</button>
+          : <button className="primary" title="Authorize in your browser" onClick={() => c.connect(s.name)}>{expired ? "Reconnect" : "Connect"}</button>)}
         <button className="secondary" onClick={() => c.remove(s.name)}>Remove</button>
       </div>
     );
@@ -1188,7 +1188,6 @@ function ConnectorsModal(props: { c: ReturnType<typeof useConnectors>; inSession
         <div className="modal-scroll">
         {c.error && <div className="res-error">{c.error}</div>}
         {c.busy && <Loading label={c.busy} />}
-        {!props.inSession && <div className="muted" style={{ marginBottom: 10 }}>Add connectors here anytime. Start a session to connect (sign in) and use them.</div>}
 
         {c.servers.length > 0 && (
           <>

@@ -461,13 +461,12 @@ ipcMain.handle("piwork:setMcpServers", (_e, scope: "global" | "project", folder:
   catch (err) { return { ok: false, error: err instanceof Error ? err.message : String(err) }; }
 });
 
-// Host-side OAuth callback server: the browser redirect lands here (on the host), and we
-// hand the full redirect URL to pi-host to finish the flow. One connect in flight at a time.
+// Host-side OAuth callback server: the browser redirect lands here (on the host) and we
+// hand the full redirect URL to the auth container to finish the flow.
 let mcpCallbackServer: import("node:http").Server | undefined;
 let pendingMcpAuth: { server: string } | undefined;
 function ensureMcpCallbackServer(): void {
   if (mcpCallbackServer) return;
-  // Lazy require so we don't pull http unless connectors are used.
   const http = require("node:http") as typeof import("node:http");
   mcpCallbackServer = http.createServer((req, res) => {
     const url = req.url ?? "/";
@@ -477,32 +476,95 @@ function ensureMcpCallbackServer(): void {
     pendingMcpAuth = undefined;
     res.writeHead(200, { "content-type": "text/html" });
     res.end("<!doctype html><meta charset=utf-8><body style=\"font:15px -apple-system,sans-serif;padding:40px;text-align:center\"><h2>Connected ✓</h2><p>You can close this tab and return to Piwork.</p></body>");
-    if (server && bridge) {
+    if (server && authBridge) {
       log(`mcp oauth: callback for ${server}, completing`);
-      bridge.send({ type: "prompt", message: `/piwork-mcp-complete ${server} ${fullUrl}` });
+      authBridge.send({ type: "prompt", message: `/piwork-mcp-complete ${server} ${fullUrl}` });
+      bumpAuthIdle();
     } else {
-      log(`mcp oauth: callback with no pending server/bridge (server=${server})`);
+      log(`mcp oauth: callback with no pending server/auth container (server=${server})`);
     }
   });
   mcpCallbackServer.on("error", (e) => log(`mcp callback server error: ${String(e)}`));
   mcpCallbackServer.listen(MCP_CALLBACK_PORT, "127.0.0.1", () => log(`mcp callback server on ${MCP_REDIRECT_URI}`));
 }
 
-ipcMain.handle("piwork:mcpConnect", (_e, server: string) => {
-  if (!bridge) return { ok: false, error: "Start a session to connect this connector." };
-  ensureMcpCallbackServer();
-  pendingMcpAuth = { server };
-  bridge.send({ type: "prompt", message: `/piwork-mcp-auth ${server}` });
-  return { ok: true };
+// A dedicated, short-lived container that hosts pi-mcp-adapter for connector auth/status —
+// independent of any chat session. This is why Connect works from the home screen, and why
+// authorizing never injects a /command into the user's conversation. One at a time; idle-
+// torn-down. Its openExternal opens the host browser; its notify/mcpStatus are forwarded to
+// the UI (toast + live status), but NOT its hello/events (so the chat view never switches).
+let authBridge: ContainerBridge | undefined;
+let authIdleTimer: ReturnType<typeof setTimeout> | undefined;
+function bumpAuthIdle(): void {
+  if (authIdleTimer) clearTimeout(authIdleTimer);
+  authIdleTimer = setTimeout(() => void teardownAuthBridge(), 6 * 60 * 1000);
+}
+async function teardownAuthBridge(): Promise<void> {
+  if (authIdleTimer) { clearTimeout(authIdleTimer); authIdleTimer = undefined; }
+  const b = authBridge; authBridge = undefined; pendingMcpAuth = undefined;
+  await b?.stop();
+}
+function ensureAuthBridge(scope: "global" | "project", folder?: string): Promise<ContainerBridge> {
+  bumpAuthIdle();
+  if (authBridge) return Promise.resolve(authBridge);
+  const cwd = scope === "project" && folder ? folder : globalCwd();
+  const mount = agentMount();
+  const ab = new ContainerBridge();
+  authBridge = ab;
+  ab.on("ui_request", (r: any) => {
+    if (r.method === "openExternal" && typeof r.url === "string") void shell.openExternal(r.url);
+    else if (r.method === "mcpStatus") forward("ui_request", r); // live status → modal
+    else if (r.method === "notify") {
+      // The adapter's startup bootstrap notifies "Failed to connect … Re-authentication
+      // required" for not-yet-authed servers — noise during a connect. Drop just that;
+      // keep "Connected ✓" and genuine errors.
+      const msg = String(r.message ?? "");
+      if (/failed to connect.*(re-?authentication|unauthorized|auth)/i.test(msg)) { log(`[mcp-auth] suppressed: ${msg}`); return; }
+      forward("ui_request", r);
+    }
+  });
+  ab.on("stderr", (c: string) => { const s = String(c).trim(); if (s) log(`[mcp-auth] ${s}`); });
+  ab.on("error", (e: Error) => log(`mcp auth container error: ${e.message}`));
+  ab.on("exit", () => { if (authBridge === ab) authBridge = undefined; });
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = () => { if (!settled) { settled = true; resolve(ab); } };
+    ab.on("hello", done);
+    ab.start({
+      workspace: cwd, image: IMAGE, addHostGateway: DEV_ADD_HOST_GATEWAY, ...mount,
+      extraDockerArgs: [...mcpMountArgs()],
+      env: { MCP_OAUTH_CALLBACK_PORT: String(MCP_CALLBACK_PORT), PIWORK_NO_TOOLS: "all" },
+    });
+    setTimeout(done, 15000); // fallback if hello is slow/unavailable
+  });
+}
+
+ipcMain.handle("piwork:mcpConnect", async (_e, server: string, scope: "global" | "project", folder?: string) => {
+  try {
+    ensureMcpCallbackServer();
+    const ab = await ensureAuthBridge(scope, folder);
+    pendingMcpAuth = { server };
+    ab.send({ type: "prompt", message: `/piwork-mcp-auth ${server}` });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
 });
-ipcMain.handle("piwork:mcpLogout", (_e, server: string) => {
-  if (!bridge) return { ok: false, error: "Start a session to manage this connector." };
-  bridge.send({ type: "prompt", message: `/piwork-mcp-logout ${server}` });
-  return { ok: true };
+ipcMain.handle("piwork:mcpLogout", async (_e, server: string, scope: "global" | "project", folder?: string) => {
+  try {
+    const ab = await ensureAuthBridge(scope, folder);
+    ab.send({ type: "prompt", message: `/piwork-mcp-logout ${server}` });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
 });
-ipcMain.handle("piwork:mcpRefreshStatus", () => {
-  if (bridge) bridge.send({ type: "prompt", message: "/piwork-mcp-status" });
-  return { ok: !!bridge };
+ipcMain.handle("piwork:mcpRefreshStatus", (_e, scope: "global" | "project", folder?: string) => {
+  // Prefer the active chat session's adapter if present (free); else the auth container if
+  // one is already up. Don't spin a container just to poll status.
+  if (bridge) { bridge.send({ type: "prompt", message: "/piwork-mcp-status" }); return { ok: true }; }
+  if (authBridge) { authBridge.send({ type: "prompt", message: "/piwork-mcp-status" }); bumpAuthIdle(); return { ok: true }; }
+  return { ok: false };
 });
 
 // Theme persistence (host-side file so it survives restarts and dev/prod origins).

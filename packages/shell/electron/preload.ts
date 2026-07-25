@@ -38,12 +38,12 @@ export interface PiworkApi {
   /** MCP connectors (mcp.json) — read/write the server list for a scope. */
   getMcpServers(scope: "global" | "project", folder?: string): Promise<{ servers: any[] }>;
   setMcpServers(scope: "global" | "project", folder: string | undefined, servers: any[]): Promise<{ ok: boolean; error?: string }>;
-  /** Begin OAuth for a connector (drives the browser relay). Needs an active session. */
-  mcpConnect(server: string): Promise<{ ok: boolean; error?: string }>;
-  /** Disconnect a connector (clear its OAuth credentials). Needs an active session. */
-  mcpLogout(server: string): Promise<{ ok: boolean; error?: string }>;
-  /** Ask pi-host to emit current connector auth status (arrives as an mcpStatus message). */
-  mcpRefreshStatus(): Promise<{ ok: boolean }>;
+  /** Begin OAuth for a connector — opens the browser via a dedicated auth container. */
+  mcpConnect(server: string, scope: "global" | "project", folder?: string): Promise<{ ok: boolean; error?: string }>;
+  /** Disconnect a connector (clear its OAuth credentials). */
+  mcpLogout(server: string, scope: "global" | "project", folder?: string): Promise<{ ok: boolean; error?: string }>;
+  /** Ask for current connector auth status (arrives as an mcpStatus message), if a container is up. */
+  mcpRefreshStatus(scope: "global" | "project", folder?: string): Promise<{ ok: boolean }>;
   /** Send a command to pi-host (RpcCommand-shaped). */
   send(command: Record<string, unknown>): void;
   /** Respond to a blocking ctx.ui request. */
@@ -83,9 +83,9 @@ const api: PiworkApi = {
   setConfig: (patch) => ipcRenderer.invoke("piwork:setConfig", patch),
   getMcpServers: (scope, folder) => ipcRenderer.invoke("piwork:getMcpServers", scope, folder),
   setMcpServers: (scope, folder, servers) => ipcRenderer.invoke("piwork:setMcpServers", scope, folder, servers),
-  mcpConnect: (server) => ipcRenderer.invoke("piwork:mcpConnect", server),
-  mcpLogout: (server) => ipcRenderer.invoke("piwork:mcpLogout", server),
-  mcpRefreshStatus: () => ipcRenderer.invoke("piwork:mcpRefreshStatus"),
+  mcpConnect: (server, scope, folder) => ipcRenderer.invoke("piwork:mcpConnect", server, scope, folder),
+  mcpLogout: (server, scope, folder) => ipcRenderer.invoke("piwork:mcpLogout", server, scope, folder),
+  mcpRefreshStatus: (scope, folder) => ipcRenderer.invoke("piwork:mcpRefreshStatus", scope, folder),
   send: (command) => ipcRenderer.send("piwork:send", command),
   respondUi: (response) => ipcRenderer.send("piwork:respondUi", response),
   onMessage: (listener) => {

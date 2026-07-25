@@ -27,9 +27,9 @@ export interface PiworkApi {
   setConfig(patch: Record<string, unknown>): Promise<{ shareAgentsDir?: boolean }>;
   getMcpServers(scope: "global" | "project", folder?: string): Promise<{ servers: McpServer[] }>;
   setMcpServers(scope: "global" | "project", folder: string | undefined, servers: McpServer[]): Promise<{ ok: boolean; error?: string }>;
-  mcpConnect(server: string): Promise<{ ok: boolean; error?: string }>;
-  mcpLogout(server: string): Promise<{ ok: boolean; error?: string }>;
-  mcpRefreshStatus(): Promise<{ ok: boolean }>;
+  mcpConnect(server: string, scope: "global" | "project", folder?: string): Promise<{ ok: boolean; error?: string }>;
+  mcpLogout(server: string, scope: "global" | "project", folder?: string): Promise<{ ok: boolean; error?: string }>;
+  mcpRefreshStatus(scope: "global" | "project", folder?: string): Promise<{ ok: boolean }>;
   send(command: Record<string, unknown>): void;
   respondUi(response: Record<string, unknown>): void;
   onMessage(listener: (msg: { channel: string; payload: unknown }) => void): () => void;
