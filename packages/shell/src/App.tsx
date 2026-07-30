@@ -1100,7 +1100,7 @@ function CustomConnectorForm(props: { onSave: (s: McpServer) => void; onCancel: 
     for (const { k, v } of pairs) if (k.trim()) kv[k.trim()] = v;
     const server: McpServer = kind === "remote"
       ? { name, label: label.trim(), url: url.trim(), auth: remoteAuth === "oauth" ? "oauth" : "bearer", ...(remoteAuth === "token" && Object.keys(kv).length ? { headers: kv } : {}) }
-      : { name, label: label.trim(), command: command.trim(), args: argsText.split(/\s+/).filter(Boolean) };
+      : { name, label: label.trim(), command: command.trim(), args: argsText.split(/\s+/).filter(Boolean), ...(Object.keys(kv).length ? { env: kv } : {}) };
     props.onSave(server);
   };
 
@@ -1135,6 +1135,16 @@ function CustomConnectorForm(props: { onSave: (s: McpServer) => void; onCancel: 
         <>
           <label className="conn-field"><span>Command</span><input placeholder="npx" value={command} onChange={(e) => setCommand(e.target.value)} /></label>
           <label className="conn-field"><span>Arguments</span><input placeholder="-y @scope/mcp-server" value={argsText} onChange={(e) => setArgsText(e.target.value)} /></label>
+          <div className="conn-field"><span>Environment variables (tokens)</span>
+            {pairs.map((row, i) => (
+              <div key={i} className="kv-row">
+                <input placeholder="SLACK_BOT_TOKEN" value={row.k} onChange={(e) => setPair(i, { k: e.target.value })} />
+                <input type="password" placeholder="xoxb-…" value={row.v} onChange={(e) => setPair(i, { v: e.target.value })} />
+                <button className="secondary" onClick={() => removePair(i)} title="Remove">✕</button>
+              </div>
+            ))}
+            <button className="link" onClick={addPair}>+ add</button>
+          </div>
         </>
       )}
       <div className="modal-actions">

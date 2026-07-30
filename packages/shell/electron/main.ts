@@ -420,7 +420,7 @@ function mcpMountArgs(): string[] {
 
 interface McpServer {
   name: string; label?: string; url?: string; auth?: "oauth" | "bearer";
-  command?: string; args?: string[]; headers?: Record<string, string>;
+  command?: string; args?: string[]; headers?: Record<string, string>; env?: Record<string, string>;
 }
 function mcpConfigPath(scope: "global" | "project", folder?: string): string {
   if (scope === "project" && folder) return path.join(folder, ".pi", "mcp.json");
@@ -431,7 +431,7 @@ function readMcpServers(scope: "global" | "project", folder?: string): { servers
     const raw = JSON.parse(fs.readFileSync(mcpConfigPath(scope, folder), "utf8"));
     const map = raw.mcpServers ?? {};
     const servers: McpServer[] = Object.entries<any>(map).map(([name, def]) => ({
-      name, label: def.label, url: def.url, auth: def.auth, command: def.command, args: def.args, headers: def.headers,
+      name, label: def.label, url: def.url, auth: def.auth, command: def.command, args: def.args, headers: def.headers, env: def.env,
     }));
     return { servers };
   } catch { return { servers: [] }; }
@@ -445,6 +445,7 @@ function writeMcpServers(scope: "global" | "project", folder: string | undefined
     if (s.command) entry.command = s.command;
     if (s.args?.length) entry.args = s.args;
     if (s.headers && Object.keys(s.headers).length) entry.headers = s.headers;
+    if (s.env && Object.keys(s.env).length) entry.env = s.env;
     if (s.auth) entry.auth = s.auth;
     // Pin the redirect to our host callback port so browser OAuth returns seamlessly.
     if (s.auth === "oauth") entry.oauth = { redirectUri: MCP_REDIRECT_URI };

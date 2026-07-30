@@ -90,6 +90,7 @@ export interface McpServer {
   command?: string;
   args?: string[];
   headers?: Record<string, string>;
+  env?: Record<string, string>; // secrets for stdio servers (e.g. SLACK_BOT_TOKEN)
 }
 export type McpAuthStatus = "authenticated" | "expired" | "not_authenticated" | "n/a";
 export interface McpStatusEntry { name: string; oauth: boolean; status: McpAuthStatus }
