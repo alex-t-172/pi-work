@@ -8,3 +8,19 @@ dist/
 .spike-tmp-*/
 .smoke-tmp-*/
 .deliv-tmp-*/
+
+# local env / secrets — never commit
+.env
+.env.*
+*.local
+*.pem
+*.key
+
+# editor / OS cruft
+.idea/
+*.swp
+Thumbs.db
+
+# Note: project MCP connectors live in .pi/mcp.json and are intentionally trackable
+# (shareable, like .mcp.json). The shell refuses to write token secrets there — those go
+# to host-side global config. If a repo's .pi/mcp.json ever holds a secret, ignore it here.

@@ -458,6 +458,16 @@ function writeMcpServers(scope: "global" | "project", folder: string | undefined
 
 ipcMain.handle("piwork:getMcpServers", (_e, scope: "global" | "project", folder?: string) => readMcpServers(scope, folder));
 ipcMain.handle("piwork:setMcpServers", (_e, scope: "global" | "project", folder: string | undefined, servers: McpServer[]) => {
+  // Guard: a project connector is written to <repo>/.pi/mcp.json, which can be committed.
+  // Refuse to put a secret (stdio env token / auth header) there — those belong in global
+  // config (~/.piwork/mcp-global, host-side, never in a repo). OAuth/plain-URL are fine:
+  // their secrets live in the container's token store, not the file.
+  if (scope === "project") {
+    const leaky = servers.find((s) => (s.env && Object.keys(s.env).length > 0) || (s.headers && Object.keys(s.headers).length > 0));
+    if (leaky) {
+      return { ok: false, error: `“${leaky.label ?? leaky.name}” carries a token/secret, which can't be saved to a project — it would be written to this repo's .pi/mcp.json and could be committed. Add it as a Global connector instead (its secret stays on your machine).` };
+    }
+  }
   try { writeMcpServers(scope, folder, servers); return { ok: true }; }
   catch (err) { return { ok: false, error: err instanceof Error ? err.message : String(err) }; }
 });

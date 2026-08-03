@@ -31,13 +31,14 @@ export function useConnectors() {
   const close = useCallback(() => setOpen(false), []);
 
   const persist = useCallback(async (next: McpServer[]) => {
-    setServers(next);
+    const prev = servers;
+    setServers(next); // optimistic
     setBusy("Saving…");
     const r = await window.piwork.setMcpServers(mode, folder, next);
     setBusy(null);
-    if (!r.ok) setError(r.error ?? "save failed");
-    else setDirty(true);
-  }, [mode, folder]);
+    if (!r.ok) { setError(r.error ?? "save failed"); setServers(prev); } // revert on rejection (e.g. secret-in-project guard)
+    else { setError(null); setDirty(true); }
+  }, [mode, folder, servers]);
 
   const add = useCallback((s: McpServer) => persist([...servers.filter((x) => x.name !== s.name), s]), [servers, persist]);
   const remove = useCallback((name: string) => persist(servers.filter((s) => s.name !== name)), [servers, persist]);
