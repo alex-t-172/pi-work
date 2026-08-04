@@ -740,14 +740,33 @@ function Widgets(props: { lines: Record<string, string[]>; placement: string }) 
 }
 
 function Chat(props: { items: ChatItem[]; connection: string }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  const atBottomRef = useRef(true);
+  const isNearBottom = () => {
+    const el = scrollRef.current;
+    return !el || el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+  };
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
+    atBottomRef.current = true;
   }, [props.items]);
+  // Keep the newest content pinned above the composer when the panel resizes (e.g. the
+  // composer is dragged taller) — but only if the user was already at the bottom.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      if (atBottomRef.current) endRef.current?.scrollIntoView({ behavior: "auto" });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const onScroll = () => { atBottomRef.current = isNearBottom(); };
 
   if (props.items.length === 0) {
     return (
-      <div className="chat empty">
+      <div className="chat empty" ref={scrollRef} onScroll={onScroll}>
         <div className="hint">
           {props.connection === "starting" ? "Starting sandbox…" : "Ready. Type a message below."}
         </div>
@@ -756,7 +775,7 @@ function Chat(props: { items: ChatItem[]; connection: string }) {
     );
   }
   return (
-    <div className="chat">
+    <div className="chat" ref={scrollRef} onScroll={onScroll}>
       {props.items.map((it) => (
         <Message key={it.id} item={it} />
       ))}
