@@ -36,7 +36,7 @@ export default function App() {
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const [showDebug, setShowDebug] = useState(false);
   const [showTheme, setShowTheme] = useState(false);
-  const [showProviders, setShowProviders] = useState(false);
+  const [showModelAccount, setShowModelAccount] = useState(false);
   const [artWidth, setArtWidth] = useState(520);
   const [filesOpen, setFilesOpen] = useState(false); // one shared drawer state across home/folder/session
   const [openFile, setOpenFile] = useState<FileContent | null>(null);
@@ -67,12 +67,16 @@ export default function App() {
   // file is context-specific, so clear it when the session context changes.
   useEffect(() => { setOpenFile(null); }, [inSession]);
 
-  // Rail items shared by both contexts (bottom group).
-  const railBottom: RailItem[] = [
+  // Settings zone: shared by home & session. Model/account + Theme + Debug all live on the
+  // rail now (variant C: the rail is the whole control surface, the top bar ≈ vanishes).
+  const settingsRail: RailItem[] = [
+    { key: "model", icon: "🧠", label: "Model", onClick: () => setShowModelAccount(true), title: "Model & account" },
     { key: "theme", icon: "🎨", label: "Theme", onClick: () => setShowTheme(true), title: "Theme" },
     { key: "debug", icon: "🐞", label: "Debug", onClick: () => setShowDebug((v) => !v), title: "Debug drawer" },
   ];
-  const sessionRailTop: RailItem[] = [
+  // Tools zone (in-session): the panels/viewers for the running sandbox. Scope for Skills /
+  // Connect is chosen inside the modal, so one entry each does both global & project.
+  const sessionTools: RailItem[] = [
     // Files: only a real workspace has files (the folderless global chat has none).
     ...(b.globalMode || !filesRoot ? [] : [{ key: "files", icon: "📁", label: "Files", title: "Browse workspace files", active: filesOpen, onClick: () => setFilesOpen((v) => !v) } as RailItem]),
     { key: "skills", icon: "🧩", label: "Skills", title: "Manage skills, plugins & extensions", onClick: () => (b.globalMode ? r.openFor("global") : b.activeFolder && r.openFor("project", b.activeFolder)) },
@@ -80,33 +84,27 @@ export default function App() {
     { key: "docs", icon: "🖼", label: "Docs", title: "Artifacts & document viewer", badge: artifactCount, active: b.artifactsOpen && artifactCount > 0, onClick: () => b.setArtifactsOpen((v: boolean) => !v) },
     { key: "rewind", icon: "⏪", label: "Rewind", disabled: b.streaming, active: b.treeOpen, title: b.streaming ? "Rewind is available when the agent is idle" : "Rewind — jump back to an earlier point", onClick: b.openSessionTree },
   ];
-  const homeRailTop: RailItem[] = [
+  const homeTools: RailItem[] = [
     { key: "files", icon: "📁", label: "Files", title: "Browse folders — pick where to start a sandbox", active: filesOpen, onClick: () => setFilesOpen((v) => !v) },
-    { key: "skills", icon: "🧩", label: "Skills", title: "Global skills, plugins & extensions", onClick: () => r.openFor("global") },
-    { key: "connect", icon: "🔌", label: "Connect", title: "Global MCP connectors (Slack, Notion, …)", onClick: () => c.openFor("global") },
+    { key: "skills", icon: "🧩", label: "Skills", title: "Skills, plugins & extensions", onClick: () => r.openFor("global") },
+    { key: "connect", icon: "🔌", label: "Connect", title: "MCP connectors (Slack, Notion, …)", onClick: () => c.openFor("global") },
   ];
+  // Home / exit anchor, pinned at the very bottom of the rail. Only meaningful in-session
+  // (incl. global chat) — 🏠 ends the current session and returns home. Hidden on the home screen.
+  const homeAnchor: RailItem = { key: "home", icon: "🏠", label: "Home", title: "End the session and return home", onClick: b.endToHome };
 
   return (
     <div className="app">
       {inSession ? (
         <div className="app-row">
-        <ActivityRail top={sessionRailTop} bottom={railBottom} />
+        <ActivityRail tools={sessionTools} settings={settingsRail} anchor={homeAnchor} />
         {filesOpen && filesRoot && (
           <FilesPanel initialDir={filesRoot} floor={filesRoot} openPath={openFile?.path ?? null} onOpenFile={openFileAt} onClose={() => setFilesOpen(false)} />
         )}
         <div className="app-col">
-          <TopBar
+          <StatusLine
             connection={b.connection}
-            hello={b.hello}
-            currentModel={b.currentModel}
-            models={b.models}
-            globalMode={b.globalMode}
-            onEndSessions={b.endToSessions}
-            onEndHome={b.endToHome}
-            onPickModel={b.setModel}
-            connectedProviders={connectedProviders}
-            currentProvider={b.currentModel?.provider}
-            onProviders={() => setShowProviders(true)}
+            label={b.globalMode ? "Global chat" : b.activeFolder ? basename(b.activeFolder) : "Session"}
           />
           <StatusBar statuses={b.statuses} streaming={b.streaming} onAbort={b.abort} />
           <Widgets lines={b.widgets.above} placement="above" />
@@ -127,7 +125,7 @@ export default function App() {
         </div>
       ) : (
         <div className="app-row">
-          <ActivityRail top={homeRailTop} bottom={railBottom} />
+          <ActivityRail tools={homeTools} settings={settingsRail} />
           {filesOpen && (
             <FilesPanel
               initialDir={b.launcherFolder ?? ""}
@@ -145,9 +143,6 @@ export default function App() {
             onSelectFolder={b.selectFolder}
             onBack={b.backToFolders}
             onStart={b.startWith}
-            onLogin={b.startLogin}
-            onManageProject={(folder) => r.openFor("project", folder)}
-            onConnectorsProject={(folder) => c.openFor("project", folder)}
             onNewChat={() => b.startGlobal()}
           />
           {openFile && (
@@ -164,16 +159,19 @@ export default function App() {
       )}
       <Toasts toasts={b.toasts} />
       {showTheme && <ThemeModal t={t} onClose={() => setShowTheme(false)} />}
-      {showProviders && (
-        <ProvidersModal
+      {showModelAccount && (
+        <ModelAccountModal
+          models={b.models}
+          currentModel={b.currentModel}
+          onPickModel={b.setModel}
           connected={connectedProviders}
-          current={b.currentModel?.provider}
-          onConnect={() => { setShowProviders(false); b.startLogin(); }}
-          onClose={() => setShowProviders(false)}
+          hello={b.hello}
+          onConnect={() => { setShowModelAccount(false); b.startLogin(); }}
+          onClose={() => setShowModelAccount(false)}
         />
       )}
-      {r.open && <ResourcesModal r={r} inSession={inSession} onClose={r.close} />}
-      {c.open && <ConnectorsModal c={c} inSession={inSession} status={b.mcpStatus} onClose={c.close} />}
+      {r.open && <ResourcesModal r={r} inSession={inSession} projectFolder={(inSession ? b.activeFolder : b.launcherFolder) ?? undefined} onClose={r.close} />}
+      {c.open && <ConnectorsModal c={c} inSession={inSession} projectFolder={(inSession ? b.activeFolder : b.launcherFolder) ?? undefined} status={b.mcpStatus} onClose={c.close} />}
       {b.dialog && <DialogModal dialog={b.dialog} onRespond={b.respondDialog} />}
       {inSession && b.treeOpen && b.sessionTree && (
         <SessionTreePanel data={b.sessionTree} rewinding={b.rewinding} busy={b.streaming} onRewind={b.rewindTo} onClose={() => b.setTreeOpen(false)} />
@@ -208,9 +206,6 @@ function Launcher(props: {
   onSelectFolder: (folder: string) => void;
   onBack: () => void;
   onStart: (folder: string, session?: string) => void;
-  onLogin: () => void;
-  onManageProject: (folder: string) => void;
-  onConnectorsProject: (folder: string) => void;
   onNewChat: () => void;
 }) {
   return (
@@ -218,7 +213,6 @@ function Launcher(props: {
       <div className="launcher-head">
         <span className="brand">Piwork</span>
         <div className="spacer" />
-        <button className="secondary" onClick={props.onLogin}>Connect provider</button>
       </div>
 
       {!props.folder ? (
@@ -252,8 +246,6 @@ function Launcher(props: {
           </div>
           <div className="folder-actions">
             <button className="primary" onClick={() => props.onStart(props.folder!, "new")}>＋ New session</button>
-            <button className="secondary" onClick={() => props.onManageProject(props.folder!)}>🧩 Project extensions & skills</button>
-            <button className="secondary" onClick={() => props.onConnectorsProject(props.folder!)}>🔌 Project connectors</button>
           </div>
           <h3>History</h3>
           {props.sessions === null ? (
@@ -285,10 +277,7 @@ function LoginModal(props: {
   const l = props.login;
   const [text, setText] = useState("");
   return (
-    <div className="modal-backdrop" onClick={props.onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-title">Sign in</div>
-
+    <ModalShell title="Sign in" onClose={props.onClose}>
         {l.error ? (
           <>
             <div className="modal-message" style={{ color: "var(--error)" }}>{l.error}</div>
@@ -335,8 +324,7 @@ function LoginModal(props: {
             <div className="modal-actions"><button className="secondary" onClick={props.onClose}>Cancel</button></div>
           </>
         )}
-      </div>
-    </div>
+    </ModalShell>
   );
 }
 
@@ -624,7 +612,11 @@ function DebugDrawer(props: { debugLog: string[]; stderrLog: string[]; onClose: 
 // screen and an in-session view each compose their own set; also the intended dock for the
 // Files panel and extension setWidget panels.
 type RailItem = { key: string; icon: string; label: string; onClick: () => void; active?: boolean; disabled?: boolean; title?: string; badge?: number };
-function ActivityRail(props: { top: RailItem[]; bottom: RailItem[] }) {
+// Left activity rail, variant C: three visually-zoned groups top→bottom —
+//   1. Tools (files/skills/connect/docs/rewind),
+//   2. a divider, then Settings (model/account, theme, debug),
+//   3. a flexible spacer, then a pinned Home/exit anchor (in-session only).
+function ActivityRail(props: { tools: RailItem[]; settings: RailItem[]; anchor?: RailItem }) {
   const render = (it: RailItem) => (
     <button
       key={it.key}
@@ -639,67 +631,71 @@ function ActivityRail(props: { top: RailItem[]; bottom: RailItem[] }) {
   );
   return (
     <div className="activity-rail">
-      {props.top.map(render)}
+      {props.tools.map(render)}
+      <div className="rail-divider" />
+      {props.settings.map(render)}
       <div className="rail-spacer" />
-      {props.bottom.map(render)}
+      {props.anchor && render(props.anchor)}
     </div>
   );
 }
 
-// Slim top bar: identity + session context (model) + connection/provider + End.
-function TopBar(props: {
-  connection: string;
-  hello: { piVersion: string; sessionId?: string } | null;
-  currentModel: { provider: string; id: string } | null;
-  models: { provider: string; id: string }[];
-  globalMode: boolean;
-  onEndSessions: () => void;
-  onEndHome: () => void;
-  onPickModel: (provider: string, id: string) => void;
-  connectedProviders: string[];
-  currentProvider?: string;
-  onProviders: () => void;
-}) {
-  const value = props.currentModel ? `${props.currentModel.provider}/${props.currentModel.id}` : "";
+// Variant C: the top bar is reduced to a non-interactive status line — a small context
+// label + a colored connection dot. No buttons: every control now lives on the rail.
+function StatusLine(props: { connection: string; label: string }) {
   return (
-    <div className="topbar">
-      <span className="brand">Piwork</span>
-      {props.globalMode && <span className="mode-badge">global chat</span>}
-      <span className={`conn conn-${props.connection}`}>{props.connection}</span>
-      {props.hello && <span className="muted">pi {props.hello.piVersion}</span>}
-      <div className="spacer" />
-      {props.models.length > 0 && (
-        <select
-          className="model-picker"
-          value={value}
-          onChange={(e) => {
-            const [provider, ...rest] = e.target.value.split("/");
-            props.onPickModel(provider, rest.join("/"));
-          }}
-        >
-          {value === "" && <option value="">select model…</option>}
-          {props.models.map((m) => (
-            <option key={`${m.provider}/${m.id}`} value={`${m.provider}/${m.id}`}>
-              {m.provider}/{m.id}
-            </option>
-          ))}
-        </select>
-      )}
-      {props.connectedProviders.length > 0 ? (
-        <button className="secondary" onClick={props.onProviders} title="Model providers">
-          <span className="conn-dot" /> {props.currentProvider ?? props.connectedProviders[0]}
-        </button>
-      ) : (
-        <button className="secondary" onClick={props.onProviders} title="Connect a model provider">Connect provider</button>
-      )}
-      {props.globalMode ? (
-        <button onClick={props.onEndHome} title="End the chat and return home">End chat</button>
-      ) : (
-        <>
-          <button onClick={props.onEndSessions} title="End the sandbox and return to this folder's sessions">End · Sessions</button>
-          <button onClick={props.onEndHome} title="End the sandbox and return to the folders home">End · Home</button>
-        </>
-      )}
+    <div className="statusline">
+      <span className={`status-dot conn-${props.connection}`} title={props.connection} />
+      <span className="statusline-label">{props.label}</span>
+    </div>
+  );
+}
+
+// One shared modal frame: a click-to-close backdrop, a header with the title on the LEFT
+// and a Done button TOP-RIGHT (consistent everywhere), an optional header-extra slot
+// (e.g. "Reload to apply"), a scrolling body, and an optional footer/actions row.
+function ModalShell(props: {
+  title: string;
+  subtitle?: string;
+  className?: string;
+  headerExtra?: React.ReactNode;
+  footer?: React.ReactNode;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="modal-backdrop" onClick={props.onClose}>
+      <div className={`modal ${props.className ?? ""}`} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-topbar">
+          <div>
+            <div className="modal-title">{props.title}</div>
+            {props.subtitle && <div className="muted">{props.subtitle}</div>}
+          </div>
+          <div className="spacer" />
+          {props.headerExtra}
+          <button onClick={props.onClose}>Done</button>
+        </div>
+        <div className="modal-scroll">{props.children}</div>
+        {props.footer && <div className="modal-actions">{props.footer}</div>}
+      </div>
+    </div>
+  );
+}
+
+// A Global / Project segmented switch used inside the Skills & Connect modals so scope is
+// chosen in one place (shared move #2). Project is disabled when there's no project context.
+function ScopeSwitch(props: { scope: "global" | "project"; projectFolder?: string; onGlobal: () => void; onProject: (folder: string) => void }) {
+  return (
+    <div className="scope-switch">
+      <button className={props.scope === "global" ? "active" : ""} onClick={props.onGlobal}>Global</button>
+      <button
+        className={props.scope === "project" ? "active" : ""}
+        disabled={!props.projectFolder}
+        title={props.projectFolder ? basename(props.projectFolder) : "No project context — open a folder first"}
+        onClick={() => props.projectFolder && props.onProject(props.projectFolder)}
+      >
+        Project{props.projectFolder ? ` · ${basename(props.projectFolder)}` : ""}
+      </button>
     </div>
   );
 }
@@ -998,7 +994,7 @@ function ScopeBadge({ scope }: { scope?: string }) {
   return <span className={`scope-badge scope-${scope}`}>{label}</span>;
 }
 
-function ResourcesModal(props: { r: ReturnType<typeof useResources>; inSession: boolean; onClose: () => void }) {
+function ResourcesModal(props: { r: ReturnType<typeof useResources>; inSession: boolean; projectFolder?: string; onClose: () => void }) {
   const { r } = props;
   const isGlobal = r.mode === "global";
   const managedScope = isGlobal ? "user" : "project";
@@ -1013,19 +1009,14 @@ function ResourcesModal(props: { r: ReturnType<typeof useResources>; inSession: 
 
   const loading = r.data === null;
   return (
-    <div className="modal-backdrop" onClick={props.onClose}>
-      <div className="modal resources-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-topbar">
-          <div>
-            <div className="modal-title">{isGlobal ? "Global extensions & skills" : "Project extensions & skills"}</div>
-            <div className="muted">{isGlobal ? "Available in every project" : `${basename(r.workspace)} — this project only`}</div>
-          </div>
-          <div className="spacer" />
-          {r.dirty && props.inSession && <button className="primary" onClick={r.reload}>Reload to apply</button>}
-          <button onClick={props.onClose}>Done</button>
-        </div>
-
-        <div className="modal-scroll">
+    <ModalShell
+      className="resources-modal"
+      title="Extensions & skills"
+      subtitle={isGlobal ? "Global — available in every project" : `${basename(r.workspace)} — this project only`}
+      headerExtra={r.dirty && props.inSession ? <button className="primary" onClick={r.reload}>Reload to apply</button> : undefined}
+      onClose={props.onClose}
+    >
+        <ScopeSwitch scope={r.mode} projectFolder={props.projectFolder} onGlobal={() => r.openFor("global")} onProject={(f) => r.openFor("project", f)} />
         {r.error && <div className="res-error">{r.error}</div>}
         {r.busy && <Loading label={r.busy} />}
 
@@ -1092,9 +1083,7 @@ function ResourcesModal(props: { r: ReturnType<typeof useResources>; inSession: 
             </label>
           </>
         )}
-        </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }
 
@@ -1196,7 +1185,7 @@ function CustomConnectorForm(props: { onSave: (s: McpServer) => void; onCancel: 
   );
 }
 
-function ConnectorsModal(props: { c: ReturnType<typeof useConnectors>; inSession: boolean; status: McpStatusEntry[]; onClose: () => void }) {
+function ConnectorsModal(props: { c: ReturnType<typeof useConnectors>; inSession: boolean; projectFolder?: string; status: McpStatusEntry[]; onClose: () => void }) {
   const { c } = props;
   const isGlobal = c.mode === "global";
   const [customOpen, setCustomOpen] = useState(false);
@@ -1224,19 +1213,14 @@ function ConnectorsModal(props: { c: ReturnType<typeof useConnectors>; inSession
   };
 
   return (
-    <div className="modal-backdrop" onClick={props.onClose}>
-      <div className="modal connectors-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-topbar">
-          <div>
-            <div className="modal-title">{isGlobal ? "Global connectors" : "Project connectors"}</div>
-            <div className="muted">{isGlobal ? "MCP servers available in every session" : `${basename(c.folder ?? "")} — this project only`}</div>
-          </div>
-          <div className="spacer" />
-          {c.dirty && props.inSession && <button className="primary" onClick={c.reload}>Reload to apply</button>}
-          <button onClick={props.onClose}>Done</button>
-        </div>
-
-        <div className="modal-scroll">
+    <ModalShell
+      className="connectors-modal"
+      title="Connectors"
+      subtitle={isGlobal ? "Global — MCP servers available in every session" : `${basename(c.folder ?? "")} — this project only`}
+      headerExtra={c.dirty && props.inSession ? <button className="primary" onClick={c.reload}>Reload to apply</button> : undefined}
+      onClose={props.onClose}
+    >
+        <ScopeSwitch scope={c.mode} projectFolder={props.projectFolder} onGlobal={() => c.openFor("global")} onProject={(f) => c.openFor("project", f)} />
         {c.error && <div className="res-error">{c.error}</div>}
         {c.busy && <Loading label={c.busy} />}
 
@@ -1264,41 +1248,74 @@ function ConnectorsModal(props: { c: ReturnType<typeof useConnectors>; inSession
             </div>
           </div>
         )}
-        </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }
 
-function ProvidersModal(props: { connected: string[]; current?: string; onConnect: () => void; onClose: () => void }) {
+// Merged model + provider control (shared move #1): ONE entry point that both picks the
+// active model (from the connected providers' models, highlighting the current one) and
+// connects/manages providers. Reached from the rail's Settings zone (🧠 Model).
+function ModelAccountModal(props: {
+  models: { provider: string; id: string }[];
+  currentModel: { provider: string; id: string } | null;
+  onPickModel: (provider: string, id: string) => void;
+  connected: string[];
+  hello: { piVersion: string; sessionId?: string } | null;
+  onConnect: () => void;
+  onClose: () => void;
+}) {
+  const cur = props.currentModel;
   return (
-    <div className="modal-backdrop" onClick={props.onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-title">Model providers</div>
-        {props.connected.length > 0 ? (
-          <>
-            <div className="modal-message">Connected — the agent can use these models:</div>
+    <ModalShell
+      title="Model & account"
+      subtitle={cur ? `${cur.provider} · ${cur.id}` : "No provider connected"}
+      className="model-account-modal"
+      onClose={props.onClose}
+      footer={<button className="primary" onClick={props.onConnect}>{props.connected.length > 0 ? "Connect another provider…" : "Connect a provider…"}</button>}
+    >
+      {props.connected.length > 0 ? (
+        <>
+          <div className="theme-section">Model</div>
+          {props.models.length > 0 ? (
             <div className="options">
-              {props.connected.map((p) => (
-                <div key={p} className="res-row">
-                  <div className="res-main">
-                    <span className="res-name"><span className="conn-dot" /> {p}</span>
-                    {p === props.current && <span className="res-desc">current model</span>}
-                  </div>
-                  <span className="scope-badge scope-project">connected</span>
-                </div>
-              ))}
+              {props.models.map((m) => {
+                const active = cur?.provider === m.provider && cur?.id === m.id;
+                return (
+                  <button
+                    key={`${m.provider}/${m.id}`}
+                    className={`res-row model-row${active ? " active" : ""}`}
+                    onClick={() => props.onPickModel(m.provider, m.id)}
+                  >
+                    <div className="res-main">
+                      <span className="res-name">{m.id}</span>
+                      <span className="res-desc">{m.provider}</span>
+                    </div>
+                    {active && <span className="scope-badge scope-project">current</span>}
+                  </button>
+                );
+              })}
             </div>
-          </>
-        ) : (
-          <div className="modal-message">No model provider connected yet. Connect one to start using models.</div>
-        )}
-        <div className="modal-actions">
-          <button className="primary" onClick={props.onConnect}>Connect a provider…</button>
-          <button className="secondary" onClick={props.onClose}>Done</button>
-        </div>
-      </div>
-    </div>
+          ) : (
+            <div className="muted">No models available yet.</div>
+          )}
+
+          <div className="theme-section">Providers</div>
+          <div className="options">
+            {props.connected.map((p) => (
+              <div key={p} className="res-row">
+                <div className="res-main">
+                  <span className="res-name"><span className="conn-dot" /> {p}</span>
+                </div>
+                <span className="scope-badge scope-project">connected</span>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : (
+        <div className="modal-message">No model provider connected yet. Connect one to start using models.</div>
+      )}
+      {props.hello && <div className="muted" style={{ marginTop: 14 }}>pi {props.hello.piVersion}</div>}
+    </ModalShell>
   );
 }
 
@@ -1317,12 +1334,25 @@ function ThemeModal(props: { t: ReturnType<typeof useTheme>; onClose: () => void
 
   const doSave = () => { t.saveAsNew(name); setName(""); setSaving(false); };
 
-  return (
-    <div className="modal-backdrop" onClick={props.onClose}>
-      <div className="modal theme-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-title">Theme</div>
+  const footer = (
+    <div className="theme-actions">
+      {activeUser && tweaked && <button onClick={t.saveChanges}>Save changes to “{activeUser.name}”</button>}
+      {tweaked && (saving ? (
+        <span className="save-as">
+          <input autoFocus placeholder="Theme name" value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && name.trim()) doSave(); if (e.key === "Escape") setSaving(false); }} />
+          <button className="primary" disabled={!name.trim()} onClick={doSave}>Save</button>
+          <button className="secondary" onClick={() => setSaving(false)}>Cancel</button>
+        </span>
+      ) : (
+        <button className="primary" onClick={() => setSaving(true)}>Save as new theme…</button>
+      ))}
+    </div>
+  );
 
-        <div className="modal-scroll">
+  return (
+    <ModalShell title="Theme" className="theme-modal" onClose={props.onClose} footer={tweaked ? footer : undefined}>
         <div className="theme-section">Presets</div>
         <div className="preset-grid">
           {Object.entries(PRESETS).map(([presetName, v]) => (
@@ -1393,26 +1423,7 @@ function ThemeModal(props: { t: ReturnType<typeof useTheme>; onClose: () => void
             </label>
           ))}
         </div>
-        </div>
-
-        <div className="modal-actions theme-actions">
-          {activeUser && tweaked && <button onClick={t.saveChanges}>Save changes to “{activeUser.name}”</button>}
-          {tweaked && (saving ? (
-            <span className="save-as">
-              <input autoFocus placeholder="Theme name" value={name}
-                onChange={(e) => setName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter" && name.trim()) doSave(); if (e.key === "Escape") setSaving(false); }} />
-              <button className="primary" disabled={!name.trim()} onClick={doSave}>Save</button>
-              <button className="secondary" onClick={() => setSaving(false)}>Cancel</button>
-            </span>
-          ) : (
-            <button className="primary" onClick={() => setSaving(true)}>Save as new theme…</button>
-          ))}
-          <div className="spacer" />
-          <button onClick={props.onClose}>Done</button>
-        </div>
-      </div>
-    </div>
+    </ModalShell>
   );
 }
 
@@ -1421,9 +1432,7 @@ function DialogModal(props: { dialog: UiDialog; onRespond: (r: Record<string, un
   const [text, setText] = useState(d.prefill ?? "");
   const cancel = () => props.onRespond({ type: "extension_ui_response", id: d.id, cancelled: true });
   return (
-    <div className="modal-backdrop" onClick={cancel}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-title">{d.title}</div>
+    <ModalShell title={d.title} onClose={cancel}>
         {d.message && <div className="modal-message">{d.message}</div>}
 
         {d.method === "select" && (
@@ -1456,7 +1465,6 @@ function DialogModal(props: { dialog: UiDialog; onRespond: (r: Record<string, un
             </div>
           </>
         )}
-      </div>
-    </div>
+    </ModalShell>
   );
 }
