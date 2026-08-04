@@ -1,11 +1,14 @@
 /**
  * Theming: the shell's look is driven entirely by CSS custom properties on :root.
- * A theme = a preset (full set of token values) + optional per-token overrides the
- * user tweaks in-app. Everything is applied live and persisted host-side, so a
- * non-developer never touches CSS or the terminal.
+ *
+ * A theme bundles colours + typography (font + base size). Built-in PRESETS are read-only
+ * starting points; the user tweaks live (overrides) and can "Save as new theme" to persist a
+ * named theme into `userThemes`. Everything applies live and persists host-side, so a
+ * non-developer never touches CSS or the terminal. Fonts are system stacks only (the
+ * renderer is sandboxed/offline — no downloading web fonts).
  */
 
-/** The tunable tokens, with human labels for the customizer. Order = display order. */
+/** Colour tokens, with human labels for the customizer. Order = display order. */
 export const THEME_TOKENS = [
   { key: "accent", label: "Accent" },
   { key: "bg", label: "Background" },
@@ -20,15 +23,34 @@ export const THEME_TOKENS = [
 export type ThemeToken =
   | "bg" | "bg2" | "panel" | "border" | "fg" | "muted" | "accent" | "user" | "live" | "error" | "warn";
 
-export type ThemeVars = Record<ThemeToken, string>;
+export type ThemeColors = Record<ThemeToken, string>;
 
+/** Curated system font stacks (system-available only). Stored by key so themes stay portable. */
+export const FONT_OPTIONS = [
+  { key: "system", label: "System", stack: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' },
+  { key: "grotesk", label: "Grotesk", stack: '"Helvetica Neue", Arial, "Segoe UI", sans-serif' },
+  { key: "reading", label: "Reading", stack: 'Verdana, Geneva, Tahoma, sans-serif' },
+  { key: "serif", label: "Serif", stack: 'Georgia, "Times New Roman", serif' },
+  { key: "mono", label: "Monospace", stack: '"SF Mono", "JetBrains Mono", Menlo, Consolas, monospace' },
+] as const;
+export const FONT_STACKS: Record<string, string> = Object.fromEntries(FONT_OPTIONS.map((o) => [o.key, o.stack]));
+
+export const SIZE_MIN = 12;
+export const SIZE_MAX = 19;
+export const SIZE_DEFAULT = 14;
+export const FONT_DEFAULT = "system";
+
+export interface Theme { colors: ThemeColors; font: string; size: number }
+export interface ThemeOverrides { colors?: Partial<ThemeColors>; font?: string; size?: number }
+export interface UserTheme { id: string; name: string; theme: Theme }
 export interface ThemeState {
-  preset: string;
-  overrides: Partial<ThemeVars>;
+  activeId: string; // "preset:<Name>" | "user:<id>"
+  overrides: ThemeOverrides; // live, unsaved tweaks on the active base
+  userThemes: Record<string, UserTheme>;
 }
 
-/** Built-in presets. Each is a COMPLETE set so switching never leaves stale tokens. */
-export const PRESETS: Record<string, ThemeVars> = {
+/** Built-in colour presets. Each is a COMPLETE set so switching never leaves stale tokens. */
+export const PRESETS: Record<string, ThemeColors> = {
   Midnight: { bg: "#16181d", bg2: "#1d2027", panel: "#23262e", border: "#2f333c", fg: "#e6e8ec", muted: "#8b909a", accent: "#6ea8fe", user: "#2a3550", live: "#3fb950", error: "#f85149", warn: "#d29922" },
   Graphite: { bg: "#1a1a1a", bg2: "#212121", panel: "#282828", border: "#383838", fg: "#eaeaea", muted: "#9a9a9a", accent: "#e0895a", user: "#33302b", live: "#7fb950", error: "#f06a6a", warn: "#d8a657" },
   Light: { bg: "#f7f8fa", bg2: "#eef0f3", panel: "#ffffff", border: "#d8dce2", fg: "#1c1f24", muted: "#6b7280", accent: "#2563eb", user: "#dbe6ff", live: "#1a7f37", error: "#cf222e", warn: "#9a6700" },
@@ -36,17 +58,49 @@ export const PRESETS: Record<string, ThemeVars> = {
   Matrix: { bg: "#000000", bg2: "#0a0f0a", panel: "#0d160d", border: "#173d17", fg: "#c8facc", muted: "#4f8f57", accent: "#39ff14", user: "#0f2a12", live: "#39ff14", error: "#ff5555", warn: "#e3b341" },
 };
 
-export const DEFAULT_THEME: ThemeState = { preset: "Midnight", overrides: {} };
+export const DEFAULT_THEME: ThemeState = { activeId: "preset:Midnight", overrides: {}, userThemes: {} };
 
-/** Final token values = preset merged with the user's overrides. */
-export function resolveVars(t: ThemeState): ThemeVars {
-  const base = PRESETS[t.preset] ?? PRESETS.Midnight;
-  return { ...base, ...t.overrides };
+/** The base theme behind the active selection (a preset's colours + default typography, or a saved theme). */
+export function baseTheme(state: Pick<ThemeState, "activeId" | "userThemes">): Theme {
+  if (state.activeId.startsWith("user:")) {
+    const u = state.userThemes[state.activeId.slice(5)];
+    if (u) return u.theme;
+  }
+  const name = state.activeId.startsWith("preset:") ? state.activeId.slice(7) : "Midnight";
+  return { colors: PRESETS[name] ?? PRESETS.Midnight, font: FONT_DEFAULT, size: SIZE_DEFAULT };
+}
+
+/** Final theme = base merged with the user's live tweaks. */
+export function resolveTheme(state: ThemeState): Theme {
+  const b = baseTheme(state);
+  const o = state.overrides ?? {};
+  return { colors: { ...b.colors, ...(o.colors ?? {}) }, font: o.font ?? b.font, size: o.size ?? b.size };
+}
+
+export function hasTweaks(o: ThemeOverrides | undefined): boolean {
+  return !!(o && ((o.colors && Object.keys(o.colors).length > 0) || o.font !== undefined || o.size !== undefined));
 }
 
 /** Apply a theme to the live document (inline vars on :root win over stylesheet defaults). */
-export function applyTheme(t: ThemeState): void {
-  const vars = resolveVars(t);
+export function applyTheme(state: ThemeState): void {
+  const t = resolveTheme(state);
   const root = document.documentElement;
-  for (const [k, v] of Object.entries(vars)) root.style.setProperty(`--${k}`, v);
+  for (const [k, v] of Object.entries(t.colors)) root.style.setProperty(`--${k}`, v);
+  root.style.setProperty("--font-family", FONT_STACKS[t.font] ?? FONT_STACKS.system);
+  root.style.setProperty("--font-size", `${t.size}px`);
+}
+
+/** Normalise whatever was persisted (incl. the old {preset, overrides} shape) into ThemeState. */
+export function migrate(saved: unknown): ThemeState {
+  if (saved && typeof saved === "object") {
+    const s = saved as Record<string, unknown>;
+    if (typeof s.activeId === "string") {
+      return { activeId: s.activeId, overrides: (s.overrides as ThemeOverrides) ?? {}, userThemes: (s.userThemes as Record<string, UserTheme>) ?? {} };
+    }
+    if (typeof s.preset === "string") {
+      const preset = PRESETS[s.preset] ? s.preset : "Midnight";
+      return { activeId: `preset:${preset}`, overrides: { colors: (s.overrides as Partial<ThemeColors>) ?? {} }, userThemes: {} };
+    }
+  }
+  return DEFAULT_THEME;
 }

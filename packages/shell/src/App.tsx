@@ -4,7 +4,7 @@ import { useBridge } from "./useBridge.ts";
 import { useTheme } from "./useTheme.ts";
 import { useResources } from "./useResources.ts";
 import { useConnectors } from "./useConnectors.ts";
-import { PRESETS, resolveVars, THEME_TOKENS, type ThemeState, type ThemeToken } from "./theme.ts";
+import { FONT_OPTIONS, hasTweaks, PRESETS, resolveTheme, SIZE_MAX, SIZE_MIN, THEME_TOKENS } from "./theme.ts";
 import type { ChatItem, DirEntry, FileContent, LoginState, McpServer, McpStatusEntry, PackageItem, ResourceItem, ResourceList, SessionMeta, UiDialog } from "./types.ts";
 
 // Curated presets installable in one click (sources are container-side suite paths).
@@ -163,9 +163,7 @@ export default function App() {
         </div>
       )}
       <Toasts toasts={b.toasts} />
-      {showTheme && (
-        <ThemeModal theme={t.theme} onPreset={t.setPreset} onOverride={t.setOverride} onReset={t.resetTweaks} onClose={() => setShowTheme(false)} />
-      )}
+      {showTheme && <ThemeModal t={t} onClose={() => setShowTheme(false)} />}
       {showProviders && (
         <ProvidersModal
           connected={connectedProviders}
@@ -1304,56 +1302,113 @@ function ProvidersModal(props: { connected: string[]; current?: string; onConnec
   );
 }
 
-function ThemeModal(props: {
-  theme: ThemeState;
-  onPreset: (name: string) => void;
-  onOverride: (token: ThemeToken, value: string) => void;
-  onReset: () => void;
-  onClose: () => void;
-}) {
-  const vars = resolveVars(props.theme);
-  const hasTweaks = Object.keys(props.theme.overrides).length > 0;
+function ThemeModal(props: { t: ReturnType<typeof useTheme>; onClose: () => void }) {
+  const { t } = props;
+  const s = t.theme;
+  const resolved = resolveTheme(s);
+  const vars = resolved.colors;
+  const tweaked = hasTweaks(s.overrides);
+  const activeUser = s.activeId.startsWith("user:") ? s.userThemes[s.activeId.slice(5)] : null;
+  const userThemes = Object.values(s.userThemes);
+  const [saving, setSaving] = useState(false);
+  const [name, setName] = useState("");
+  const [renameId, setRenameId] = useState<string | null>(null);
+  const [renameVal, setRenameVal] = useState("");
+
+  const doSave = () => { t.saveAsNew(name); setName(""); setSaving(false); };
+
   return (
     <div className="modal-backdrop" onClick={props.onClose}>
       <div className="modal theme-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-title">Theme</div>
 
+        <div className="modal-scroll">
         <div className="theme-section">Presets</div>
         <div className="preset-grid">
-          {Object.entries(PRESETS).map(([name, v]) => (
+          {Object.entries(PRESETS).map(([presetName, v]) => (
             <button
-              key={name}
-              className={`preset-card ${props.theme.preset === name ? "active" : ""}`}
-              onClick={() => props.onPreset(name)}
+              key={presetName}
+              className={`preset-card ${s.activeId === `preset:${presetName}` ? "active" : ""}`}
+              onClick={() => t.select(`preset:${presetName}`)}
             >
               <span className="preset-swatch" style={{ background: v.bg, borderColor: v.border }}>
                 <span style={{ background: v.accent }} />
                 <span style={{ background: v.fg }} />
                 <span style={{ background: v.panel }} />
               </span>
-              <span className="preset-name">{name}</span>
+              <span className="preset-name">{presetName}</span>
             </button>
           ))}
         </div>
 
+        {userThemes.length > 0 && (
+          <>
+            <div className="theme-section">My themes</div>
+            {userThemes.map((u) => (
+              <div key={u.id} className={`res-row ${s.activeId === `user:${u.id}` ? "active-theme-row" : ""}`}>
+                {renameId === u.id ? (
+                  <input className="theme-rename" autoFocus value={renameVal}
+                    onChange={(e) => setRenameVal(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") { t.rename(u.id, renameVal); setRenameId(null); } if (e.key === "Escape") setRenameId(null); }}
+                    onBlur={() => { t.rename(u.id, renameVal); setRenameId(null); }} />
+                ) : (
+                  <button className="theme-pick" onClick={() => t.select(`user:${u.id}`)}>
+                    <span className="preset-swatch sm" style={{ background: u.theme.colors.bg, borderColor: u.theme.colors.border }}>
+                      <span style={{ background: u.theme.colors.accent }} />
+                      <span style={{ background: u.theme.colors.fg }} />
+                    </span>
+                    <span className="res-name">{u.name}</span>
+                  </button>
+                )}
+                <button className="secondary" title="Rename" onClick={() => { setRenameId(u.id); setRenameVal(u.name); }}>✎</button>
+                <button className="secondary" title="Delete" onClick={() => t.remove(u.id)}>🗑</button>
+              </div>
+            ))}
+          </>
+        )}
+
         <div className="theme-section">
-          Fine-tune
-          {hasTweaks && <button className="link" onClick={props.onReset}>reset tweaks</button>}
+          Customize
+          {tweaked && <button className="link" onClick={t.resetTweaks}>reset tweaks</button>}
         </div>
+
+        <div className="theme-typo">
+          <label className="conn-field">
+            <span>Font</span>
+            <select value={resolved.font} onChange={(e) => t.setFont(e.target.value)}>
+              {FONT_OPTIONS.map((f) => <option key={f.key} value={f.key} style={{ fontFamily: f.stack }}>{f.label}</option>)}
+            </select>
+          </label>
+          <label className="conn-field">
+            <span>Text size · {resolved.size}px</span>
+            <input type="range" min={SIZE_MIN} max={SIZE_MAX} value={resolved.size} onChange={(e) => t.setSize(Number(e.target.value))} />
+          </label>
+        </div>
+
         <div className="tune-grid">
           {THEME_TOKENS.map(({ key, label }) => (
             <label key={key} className="tune-row">
-              <input
-                type="color"
-                value={vars[key]}
-                onChange={(e) => props.onOverride(key, e.target.value)}
-              />
+              <input type="color" value={vars[key]} onChange={(e) => t.setColor(key, e.target.value)} />
               <span>{label}</span>
             </label>
           ))}
         </div>
+        </div>
 
-        <div className="modal-actions">
+        <div className="modal-actions theme-actions">
+          {activeUser && tweaked && <button onClick={t.saveChanges}>Save changes to “{activeUser.name}”</button>}
+          {tweaked && (saving ? (
+            <span className="save-as">
+              <input autoFocus placeholder="Theme name" value={name}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && name.trim()) doSave(); if (e.key === "Escape") setSaving(false); }} />
+              <button className="primary" disabled={!name.trim()} onClick={doSave}>Save</button>
+              <button className="secondary" onClick={() => setSaving(false)}>Cancel</button>
+            </span>
+          ) : (
+            <button className="primary" onClick={() => setSaving(true)}>Save as new theme…</button>
+          ))}
+          <div className="spacer" />
           <button onClick={props.onClose}>Done</button>
         </div>
       </div>
