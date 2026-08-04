@@ -114,6 +114,33 @@ network — the viewer's CSP blocks it).
 - **Global** — applies to every project. The user manages global extensions/skills from the
   Piwork Home screen; don't write global files yourself unless asked.
 
+## Sharing what you build
+
+If the user wants to share an extension or skill with others, use Pi's package convention —
+no Piwork-specific format:
+
+- **Project extension → just share the repo.** It already lives in `.pi/`, which travels with
+  git. The user commits and pushes; a collaborator clones, opens the folder in Piwork, and it
+  auto-loads. Nothing to package.
+- **Global or standalone → make it a Pi package, then push it to a git repo.** A package is a
+  folder with a `package.json`:
+
+  ```json
+  {
+    "name": "my-standup",
+    "version": "0.1.0",
+    "keywords": ["pi-package"],
+    "pi": { "extensions": ["./extensions"] }
+  }
+  ```
+
+  (use `"pi": { "skills": ["./skills"] }` for a skill). Put the extension under `extensions/`
+  next to it, `git init`, and push to a repo (e.g. with `gh repo create … --push`). If asked,
+  you can scaffold these files and run the git commands yourself in a project session.
+
+- **Others install it** from Piwork's 🧩 panel → *Install by source* → paste `git:user/repo`
+  (or `npm:pkg-name`), at global or project scope. So "share" = a git link they paste.
+
 ## Rules of thumb
 
 - Behavior/knowledge → **skill**. New command/tool/UI → **extension**.
