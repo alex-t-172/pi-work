@@ -24,3 +24,6 @@ Thumbs.db
 # Note: project MCP connectors live in .pi/mcp.json and are intentionally trackable
 # (shareable, like .mcp.json). The shell refuses to write token secrets there — those go
 # to host-side global config. If a repo's .pi/mcp.json ever holds a secret, ignore it here.
+
+# Claude Code agent worktrees / scratch
+.claude/
