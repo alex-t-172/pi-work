@@ -127,7 +127,11 @@ button.secondary { background: transparent; }
 .tool-body .dl.del { background: rgba(248,81,73,0.15); color: #ffa198; }
 .tool-body .dl.hunk { color: var(--accent); }
 
-.composer { display: flex; gap: 8px; padding: 8px 10px; border-top: 1px solid var(--border); background: var(--bg2); align-items: flex-end; }
+.composer { position: relative; display: flex; gap: 8px; padding: 8px 10px; border-top: 1px solid var(--border); background: var(--bg2); align-items: flex-end; }
+/* Grab strip across the top edge — drag up to make the input taller. */
+.composer-resizer { position: absolute; top: -3px; left: 0; right: 0; height: 9px; cursor: ns-resize; z-index: 6; }
+.composer-resizer::after { content: ""; position: absolute; left: 50%; top: 3px; transform: translateX(-50%); width: 44px; height: 3px; border-radius: 2px; background: var(--muted); opacity: 0; transition: opacity 0.15s; }
+.composer-resizer:hover::after { opacity: 0.55; }
 .composer textarea {
   flex: 1; resize: none; min-height: 22px; max-height: 160px; overflow-y: auto;
   background: var(--panel); color: var(--fg); border: 1px solid var(--border);

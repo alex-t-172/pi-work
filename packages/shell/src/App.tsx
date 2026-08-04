@@ -851,15 +851,42 @@ const Composer = (function () {
     const [text, setText] = useState("");
     const [sel, setSel] = useState(0);
     const [dismissed, setDismissed] = useState(false);
+    // null = auto-grow with content (up to AUTO_MAX). A number = height the user dragged to
+    // (sticky across sends), so long prompts stay big and editable; content scrolls within.
+    const [dragHeight, setDragHeight] = useState<number | null>(null);
+    const AUTO_MAX = 200;
+
+    // Single source of truth for textarea height: honour a user-dragged height, else grow
+    // to fit content up to the cap.
+    useEffect(() => {
+      const t = props.taRef.current;
+      if (!t) return;
+      if (dragHeight != null) { t.style.maxHeight = "none"; t.style.height = `${dragHeight}px`; }
+      else { t.style.maxHeight = ""; t.style.height = "auto"; t.style.height = `${Math.min(t.scrollHeight, AUTO_MAX)}px`; }
+    }, [dragHeight, text, props.taRef]);
 
     // Host-injected text (e.g. rewinding to a human message prefills it for editing).
     useEffect(() => {
       if (!props.injected) return;
       setText(props.injected.text);
-      const t = props.taRef.current;
-      if (t) { t.focus(); t.style.height = "auto"; t.style.height = `${Math.min(t.scrollHeight, 160)}px`; }
+      props.taRef.current?.focus();
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [props.injected?.nonce]);
+
+    // Drag the top edge of the composer to resize it (drag up = taller).
+    const startResize = (e: React.MouseEvent) => {
+      e.preventDefault();
+      const t = props.taRef.current;
+      const startY = e.clientY;
+      const startH = t ? t.getBoundingClientRect().height : 120;
+      const onMove = (ev: MouseEvent) => {
+        const next = Math.max(38, Math.min(window.innerHeight * 0.6, startH + (startY - ev.clientY)));
+        setDragHeight(next);
+      };
+      const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    };
 
     // Autocomplete when typing a slash command: "/" + partial name, no space yet.
     const match = /^\/(\S*)$/.exec(text);
@@ -871,11 +898,7 @@ const Composer = (function () {
     const open = suggestions.length > 0 && !dismissed;
     const clampedSel = Math.min(sel, Math.max(0, suggestions.length - 1));
 
-    const setTextAndResize = (v: string) => {
-      setText(v);
-      const t = props.taRef.current;
-      if (t) { t.style.height = "auto"; t.style.height = `${Math.min(t.scrollHeight, 160)}px`; }
-    };
+    const setTextAndResize = (v: string) => setText(v); // height handled by the effect
     const accept = (name: string) => {
       setTextAndResize(`/${name} `);
       setDismissed(true);
@@ -887,11 +910,12 @@ const Composer = (function () {
       setText("");
       setDismissed(false);
       setSel(0);
-      if (props.taRef.current) props.taRef.current.style.height = "auto";
+      // keep a user-dragged height across sends; the effect resizes when it's auto
     };
 
     return (
       <div className="composer">
+        <div className="composer-resizer" onMouseDown={startResize} title="Drag to resize the input" />
         <div className="composer-input">
           {open && (
             <div className="cmd-menu">
