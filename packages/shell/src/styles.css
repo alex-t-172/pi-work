@@ -81,17 +81,21 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; }
 .conn-error, .conn-exited { color: var(--error); }
 .conn-starting { color: var(--warn); }
 
-/* In-session top bar: explicit sandbox lifecycle — live dot + "Sandbox running" + End controls. */
-.sessionbar { display: flex; align-items: center; gap: 8px; padding: 7px 12px; background: var(--bg2); border-bottom: 1px solid var(--border); font-size: 13px; }
-.sandbox-state { font-weight: 600; color: var(--fg); }
-.sessionbar-ctx { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.status-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
-/* Green + a soft glow = the sandbox is live. */
-.status-dot.conn-connected { background: var(--live); box-shadow: 0 0 7px rgba(63, 185, 80, 0.7); }
-.status-dot.conn-starting { background: var(--warn); animation: pulse 1.2s infinite; }
-.status-dot.conn-error, .status-dot.conn-exited { background: var(--error); }
-/* End controls read as "stop": neutral by default, error-tinted on hover. */
-.end-btn:hover:not(:disabled) { border-color: var(--error); color: var(--error); }
+/* In-session top bar (variant A structure): leaving on the LEFT — ◀ End (stops the sandbox)
+   + a live dot + the 🏠 folder (→ home). Model/account lives on the rail. */
+.ctx { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ctx-back { display: inline-flex; align-items: center; gap: 5px; background: transparent; border: 1px solid var(--border); border-radius: 6px; color: var(--fg); padding: 4px 10px; font-size: 13px; }
+.ctx-back:hover:not(:disabled) { border-color: var(--error); color: var(--error); } /* reads as "stop" */
+.ctx-home { display: inline-flex; align-items: center; gap: 6px; background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 4px 8px; color: var(--fg); min-width: 0; }
+.ctx-home:hover { background: var(--panel); border-color: var(--border); }
+.ctx-ico { font-size: 13px; line-height: 1; }
+.ctx-label { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Connection as a live dot next to context: green + glow = sandbox running; amber pulse = starting. */
+.ctx .conn-dot { width: 9px; height: 9px; margin-right: 0; }
+.conn-dot-connected { background: var(--live); box-shadow: 0 0 7px rgba(63, 185, 80, 0.8); }
+.conn-dot-starting { background: var(--warn); animation: pulse 1.2s infinite; }
+.conn-dot-idle, .conn-dot-error, .conn-dot-exited { background: var(--muted); }
+.conn-dot-error, .conn-dot-exited { background: var(--error); }
 
 button {
   background: var(--panel); color: var(--fg); border: 1px solid var(--border);

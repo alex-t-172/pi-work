@@ -100,10 +100,10 @@ export default function App() {
         <div className="app-col">
           <SessionBar
             connection={b.connection}
-            label={b.globalMode ? "Global chat" : b.activeFolder ? basename(b.activeFolder) : "Session"}
+            contextLabel={b.activeFolder ? basename(b.activeFolder) : "Session"}
             globalMode={b.globalMode}
-            onEndToSessions={b.endToSessions}
-            onEndToHome={b.endToHome}
+            onBack={b.globalMode ? b.endToHome : b.endToSessions}
+            onHome={b.endToHome}
           />
           <StatusBar statuses={b.statuses} streaming={b.streaming} onAbort={b.abort} />
           <Widgets lines={b.widgets.above} placement="above" />
@@ -641,35 +641,40 @@ function ActivityRail(props: { tools: RailItem[]; settings: RailItem[]; anchor?:
 
 // Variant C: the top bar is reduced to a non-interactive status line — a small context
 // label + a colored connection dot. No buttons: every control now lives on the rail.
-// The in-session top bar: makes the sandbox lifecycle explicit. A live-green dot + a plain
-// "Sandbox running" label so the indicator's meaning is unmistakable, the workspace context,
-// and clearly-labelled controls to END the sandbox (leaving a session = stopping the sandbox).
+// The in-session top bar (variant A's structure): leaving lives on the LEFT as a back
+// affordance. The ◀ back button IS "end the session" — labelled so it's obvious that leaving
+// stops the sandbox (folder → this folder's sessions; global → home). Next to it a live-green
+// dot (glowing = sandbox running) and the 🏠 folder name (→ home). Model/account is on the rail.
 function SessionBar(props: {
   connection: string;
-  label: string;
+  contextLabel: string;
   globalMode: boolean;
-  onEndToSessions: () => void;
-  onEndToHome: () => void;
+  onBack: () => void; // folder → endToSessions; global → endToHome
+  onHome: () => void; // → endToHome
 }) {
-  const state =
+  const dotTitle =
     props.connection === "connected" ? "Sandbox running"
     : props.connection === "starting" ? "Starting sandbox…"
-    : props.connection === "error" || props.connection === "exited" ? "Sandbox stopped"
-    : "Sandbox";
+    : "Sandbox stopped";
   return (
-    <div className="sessionbar">
-      <span className={`status-dot conn-${props.connection}`} />
-      <span className="sandbox-state">{state}</span>
-      <span className="sessionbar-ctx">· {props.label}</span>
-      <span className="spacer" />
-      {props.globalMode ? (
-        <button className="end-btn" title="Stop this chat and return to the home screen" onClick={props.onEndToHome}>⏹ End chat</button>
-      ) : (
-        <>
-          <button className="secondary" title="Stop the sandbox and return to the home screen" onClick={props.onEndToHome}>⌂ Home</button>
-          <button className="end-btn" title="Stop the sandbox and return to this folder's sessions" onClick={props.onEndToSessions}>⏹ End session</button>
-        </>
-      )}
+    <div className="topbar">
+      <div className="ctx">
+        <button
+          className="ctx-back"
+          onClick={props.onBack}
+          title={props.globalMode ? "End the chat and return home (stops the sandbox)" : "End this session (stops the sandbox) — back to this folder's sessions"}
+        >◀ {props.globalMode ? "End chat" : "End session"}</button>
+        <span className={`conn-dot conn-dot-${props.connection}`} title={dotTitle} />
+        {props.globalMode ? (
+          <span className="ctx-label">Global chat</span>
+        ) : (
+          <button className="ctx-home" onClick={props.onHome} title="End the sandbox and return to the home screen">
+            <span className="ctx-ico">🏠</span>
+            <span className="ctx-label">{props.contextLabel}</span>
+          </button>
+        )}
+      </div>
+      <div className="spacer" />
     </div>
   );
 }
