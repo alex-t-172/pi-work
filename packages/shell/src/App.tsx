@@ -668,10 +668,14 @@ function SessionBar(props: {
         {props.globalMode ? (
           <span className="ctx-label">Global chat</span>
         ) : (
-          <button className="ctx-home" onClick={props.onHome} title="End the sandbox and return to the home screen">
-            <span className="ctx-ico">🏠</span>
+          <>
+            {/* The folder you're working in — plain context, NOT the button. */}
             <span className="ctx-label">{props.contextLabel}</span>
-          </button>
+            {/* Separate exit: back to the home screen (labelled Home, not the folder name). */}
+            <button className="ctx-home" onClick={props.onHome} title="End the sandbox and return to the home screen">
+              <span className="ctx-ico">🏠</span> Home
+            </button>
+          </>
         )}
       </div>
       <div className="spacer" />
