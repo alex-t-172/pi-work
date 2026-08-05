@@ -89,22 +89,21 @@ export default function App() {
     { key: "skills", icon: "🧩", label: "Skills", title: "Skills, plugins & extensions", onClick: () => r.openFor("global") },
     { key: "connect", icon: "🔌", label: "Connect", title: "MCP connectors (Slack, Notion, …)", onClick: () => c.openFor("global") },
   ];
-  // Home / exit anchor, pinned at the very bottom of the rail. Only meaningful in-session
-  // (incl. global chat) — 🏠 ends the current session and returns home. Hidden on the home screen.
-  const homeAnchor: RailItem = { key: "home", icon: "🏠", label: "Home", title: "End the session and return home", onClick: b.endToHome };
-
   return (
     <div className="app">
       {inSession ? (
         <div className="app-row">
-        <ActivityRail tools={sessionTools} settings={settingsRail} anchor={homeAnchor} />
+        <ActivityRail tools={sessionTools} settings={settingsRail} />
         {filesOpen && filesRoot && (
           <FilesPanel initialDir={filesRoot} floor={filesRoot} openPath={openFile?.path ?? null} onOpenFile={openFileAt} onClose={() => setFilesOpen(false)} />
         )}
         <div className="app-col">
-          <StatusLine
+          <SessionBar
             connection={b.connection}
             label={b.globalMode ? "Global chat" : b.activeFolder ? basename(b.activeFolder) : "Session"}
+            globalMode={b.globalMode}
+            onEndToSessions={b.endToSessions}
+            onEndToHome={b.endToHome}
           />
           <StatusBar statuses={b.statuses} streaming={b.streaming} onAbort={b.abort} />
           <Widgets lines={b.widgets.above} placement="above" />
@@ -642,11 +641,35 @@ function ActivityRail(props: { tools: RailItem[]; settings: RailItem[]; anchor?:
 
 // Variant C: the top bar is reduced to a non-interactive status line — a small context
 // label + a colored connection dot. No buttons: every control now lives on the rail.
-function StatusLine(props: { connection: string; label: string }) {
+// The in-session top bar: makes the sandbox lifecycle explicit. A live-green dot + a plain
+// "Sandbox running" label so the indicator's meaning is unmistakable, the workspace context,
+// and clearly-labelled controls to END the sandbox (leaving a session = stopping the sandbox).
+function SessionBar(props: {
+  connection: string;
+  label: string;
+  globalMode: boolean;
+  onEndToSessions: () => void;
+  onEndToHome: () => void;
+}) {
+  const state =
+    props.connection === "connected" ? "Sandbox running"
+    : props.connection === "starting" ? "Starting sandbox…"
+    : props.connection === "error" || props.connection === "exited" ? "Sandbox stopped"
+    : "Sandbox";
   return (
-    <div className="statusline">
-      <span className={`status-dot conn-${props.connection}`} title={props.connection} />
-      <span className="statusline-label">{props.label}</span>
+    <div className="sessionbar">
+      <span className={`status-dot conn-${props.connection}`} />
+      <span className="sandbox-state">{state}</span>
+      <span className="sessionbar-ctx">· {props.label}</span>
+      <span className="spacer" />
+      {props.globalMode ? (
+        <button className="end-btn" title="Stop this chat and return to the home screen" onClick={props.onEndToHome}>⏹ End chat</button>
+      ) : (
+        <>
+          <button className="secondary" title="Stop the sandbox and return to the home screen" onClick={props.onEndToHome}>⌂ Home</button>
+          <button className="end-btn" title="Stop the sandbox and return to this folder's sessions" onClick={props.onEndToSessions}>⏹ End session</button>
+        </>
+      )}
     </div>
   );
 }

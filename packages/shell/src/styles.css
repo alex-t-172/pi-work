@@ -81,13 +81,17 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; }
 .conn-error, .conn-exited { color: var(--error); }
 .conn-starting { color: var(--warn); }
 
-/* Variant C: the top bar is a slim, non-interactive status line — context + a connection dot. */
-.statusline { display: flex; align-items: center; gap: 8px; padding: 7px 12px; background: var(--bg2); border-bottom: 1px solid var(--border); font-size: 12px; color: var(--muted); }
-.statusline-label { font-weight: 600; color: var(--fg); }
-.status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
-.status-dot.conn-connected { background: #0b0; }
-.status-dot.conn-starting { background: var(--warn); }
+/* In-session top bar: explicit sandbox lifecycle — live dot + "Sandbox running" + End controls. */
+.sessionbar { display: flex; align-items: center; gap: 8px; padding: 7px 12px; background: var(--bg2); border-bottom: 1px solid var(--border); font-size: 13px; }
+.sandbox-state { font-weight: 600; color: var(--fg); }
+.sessionbar-ctx { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.status-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+/* Green + a soft glow = the sandbox is live. */
+.status-dot.conn-connected { background: var(--live); box-shadow: 0 0 7px rgba(63, 185, 80, 0.7); }
+.status-dot.conn-starting { background: var(--warn); animation: pulse 1.2s infinite; }
 .status-dot.conn-error, .status-dot.conn-exited { background: var(--error); }
+/* End controls read as "stop": neutral by default, error-tinted on hover. */
+.end-btn:hover:not(:disabled) { border-color: var(--error); color: var(--error); }
 
 button {
   background: var(--panel); color: var(--fg); border: 1px solid var(--border);
