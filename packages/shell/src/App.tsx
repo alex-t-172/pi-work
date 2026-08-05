@@ -98,12 +98,12 @@ export default function App() {
           <FilesPanel initialDir={filesRoot} floor={filesRoot} openPath={openFile?.path ?? null} onOpenFile={openFileAt} onClose={() => setFilesOpen(false)} />
         )}
         <div className="app-col">
-          <SessionBar
-            connection={b.connection}
-            contextLabel={b.activeFolder ? basename(b.activeFolder) : "Session"}
-            globalMode={b.globalMode}
-            onBack={b.globalMode ? b.endToHome : b.endToSessions}
+          <TopBar
             onHome={b.endToHome}
+            folderName={b.globalMode ? "Global chat" : b.activeFolder ? basename(b.activeFolder) : "Session"}
+            folderPath={b.globalMode ? undefined : b.activeFolder ?? undefined}
+            connection={b.connection}
+            onBack={b.globalMode ? undefined : b.endToSessions}
           />
           <StatusBar statuses={b.statuses} streaming={b.streaming} onAbort={b.abort} />
           <Widgets lines={b.widgets.above} placement="above" />
@@ -134,16 +134,24 @@ export default function App() {
               onClose={() => setFilesOpen(false)}
             />
           )}
-          <Launcher
-            recentFolders={b.recentFolders}
-            folder={b.launcherFolder}
-            sessions={b.launcherSessions}
-            onPick={b.pickFolder}
-            onSelectFolder={b.selectFolder}
-            onBack={b.backToFolders}
-            onStart={b.startWith}
-            onNewChat={() => b.startGlobal()}
-          />
+          <div className="app-col">
+            {/* Same TopBar frame: on the folder screen Home is leftmost (→ back to home);
+                on the true home screen the slot is the Piwork brand (you're already home). */}
+            <TopBar
+              onHome={b.launcherFolder ? b.backToFolders : undefined}
+              folderName={b.launcherFolder ? basename(b.launcherFolder) : undefined}
+              folderPath={b.launcherFolder ?? undefined}
+            />
+            <Launcher
+              recentFolders={b.recentFolders}
+              folder={b.launcherFolder}
+              sessions={b.launcherSessions}
+              onPick={b.pickFolder}
+              onSelectFolder={b.selectFolder}
+              onStart={b.startWith}
+              onNewChat={() => b.startGlobal()}
+            />
+          </div>
           {openFile && (
             <ArtifactsPane
               artifacts={{}}
@@ -203,17 +211,11 @@ function Launcher(props: {
   sessions: SessionMeta[] | null;
   onPick: () => void;
   onSelectFolder: (folder: string) => void;
-  onBack: () => void;
   onStart: (folder: string, session?: string) => void;
   onNewChat: () => void;
 }) {
   return (
     <div className="launcher">
-      <div className="launcher-head">
-        <span className="brand">Piwork</span>
-        <div className="spacer" />
-      </div>
-
       {!props.folder ? (
         <div className="launcher-body">
           <h2>Start working</h2>
@@ -238,11 +240,6 @@ function Launcher(props: {
         </div>
       ) : (
         <div className="launcher-body">
-          <div className="crumb">
-            <button className="link" onClick={props.onBack}>← folders</button>
-            <span className="folder-name">{basename(props.folder)}</span>
-            <span className="folder-path">{props.folder}</span>
-          </div>
           <div className="folder-actions">
             <button className="primary" onClick={() => props.onStart(props.folder!, "new")}>＋ New session</button>
           </div>
@@ -641,41 +638,39 @@ function ActivityRail(props: { tools: RailItem[]; settings: RailItem[]; anchor?:
 
 // Variant C: the top bar is reduced to a non-interactive status line — a small context
 // label + a colored connection dot. No buttons: every control now lives on the rail.
-// The in-session top bar (variant A's structure): leaving lives on the LEFT as a back
-// affordance. The ◀ back button IS "end the session" — labelled so it's obvious that leaving
-// stops the sandbox (folder → this folder's sessions; global → home). Next to it a live-green
-// dot (glowing = sandbox running) and the 🏠 folder name (→ home). Model/account is on the rail.
-function SessionBar(props: {
-  connection: string;
-  contextLabel: string;
-  globalMode: boolean;
-  onBack: () => void; // folder → endToSessions; global → endToHome
-  onHome: () => void; // → endToHome
+// One top bar for every screen — a stable frame. Order (left → right):
+//   🏠 Home  ·  <folder / context>  ·  🟢 live dot  ·  ◀ End session
+// Home is pinned LEFTMOST so it never moves between the folder screen and a session; on the
+// true home screen the slot is the "Piwork" brand instead (you're already home). The ◀ back
+// sits to the RIGHT of the folder name, so the arrow points back at where it takes you (that
+// folder's sessions) — and it's labelled to make clear leaving stops the sandbox. The dot +
+// ◀ appear only in-session (a sandbox is running). Model/account lives on the rail.
+function TopBar(props: {
+  onHome?: () => void;   // present → "🏠 Home" (leftmost); absent → "Piwork" brand (home screen)
+  folderName?: string;   // context label (a folder, or "Global chat")
+  folderPath?: string;   // tooltip on the folder name
+  connection?: string;   // present → live dot (in-session)
+  onBack?: () => void;   // present → "◀ End session" (a folder-based session)
 }) {
   const dotTitle =
     props.connection === "connected" ? "Sandbox running"
     : props.connection === "starting" ? "Starting sandbox…"
     : "Sandbox stopped";
+  const homeTitle = props.connection ? "End the sandbox and return to the home screen" : "Back to the home screen";
   return (
     <div className="topbar">
       <div className="ctx">
-        <button
-          className="ctx-back"
-          onClick={props.onBack}
-          title={props.globalMode ? "End the chat and return home (stops the sandbox)" : "End this session (stops the sandbox) — back to this folder's sessions"}
-        >◀ {props.globalMode ? "End chat" : "End session"}</button>
-        <span className={`conn-dot conn-dot-${props.connection}`} title={dotTitle} />
-        {props.globalMode ? (
-          <span className="ctx-label">Global chat</span>
+        {props.onHome ? (
+          <button className="ctx-home" onClick={props.onHome} title={homeTitle}>
+            <span className="ctx-ico">🏠</span> Home
+          </button>
         ) : (
-          <>
-            {/* The folder you're working in — plain context, NOT the button. */}
-            <span className="ctx-label">{props.contextLabel}</span>
-            {/* Separate exit: back to the home screen (labelled Home, not the folder name). */}
-            <button className="ctx-home" onClick={props.onHome} title="End the sandbox and return to the home screen">
-              <span className="ctx-ico">🏠</span> Home
-            </button>
-          </>
+          <span className="brand">Piwork</span>
+        )}
+        {props.folderName && <span className="ctx-label" title={props.folderPath}>{props.folderName}</span>}
+        {props.connection && <span className={`conn-dot conn-dot-${props.connection}`} title={dotTitle} />}
+        {props.onBack && (
+          <button className="ctx-back" onClick={props.onBack} title="End this session (stops the sandbox) — back to this folder's sessions">◀ End session</button>
         )}
       </div>
       <div className="spacer" />
