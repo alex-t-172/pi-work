@@ -28,6 +28,7 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; }
 .app-row { display: flex; flex: 1; min-height: 0; }
 .activity-rail { display: flex; flex-direction: column; gap: 4px; padding: 8px 6px; width: 68px; flex-shrink: 0; background: var(--bg2); border-right: 1px solid var(--border); }
 .rail-spacer { flex: 1; }
+.rail-divider { height: 1px; margin: 4px 6px; background: var(--border); flex-shrink: 0; }
 .rail-btn { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 4px; background: transparent; border: 1px solid transparent; border-radius: 8px; color: var(--muted); font-size: 10px; cursor: pointer; position: relative; }
 .rail-btn .rail-ico { font-size: 18px; line-height: 1; }
 .rail-btn:hover:not(:disabled) { background: var(--panel); border-color: var(--border); color: var(--fg); }
@@ -79,6 +80,25 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; }
 .conn-connected { color: #0b0; }
 .conn-error, .conn-exited { color: var(--error); }
 .conn-starting { color: var(--warn); }
+
+/* In-session top bar (variant A structure): leaving on the LEFT — ◀ End (stops the sandbox)
+   + a live dot + the 🏠 folder (→ home). Model/account lives on the rail. */
+.ctx { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ctx-back { display: inline-flex; align-items: center; gap: 5px; background: transparent; border: 1px solid var(--border); border-radius: 6px; color: var(--fg); padding: 4px 10px; font-size: 13px; }
+.ctx-back:hover:not(:disabled) { border-color: var(--error); color: var(--error); } /* reads as "stop" */
+.ctx-home { display: inline-flex; align-items: center; gap: 6px; background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 4px 8px; color: var(--fg); min-width: 0; }
+.ctx-home:hover { background: var(--panel); border-color: var(--border); }
+.ctx-ico { font-size: 13px; line-height: 1; }
+/* Home-screen brand occupies the SAME box as the 🏠 Home button (same padding + border), so
+   the leftmost slot — and the top-bar height — don't shift on home ↔ folder/session. */
+.ctx .brand { display: inline-flex; align-items: center; padding: 4px 8px; border: 1px solid transparent; border-radius: 6px; }
+.ctx-label { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Connection as a live dot next to context: green + glow = sandbox running; amber pulse = starting. */
+.ctx .conn-dot { width: 9px; height: 9px; margin-right: 0; }
+.conn-dot-connected { background: var(--live); box-shadow: 0 0 7px rgba(63, 185, 80, 0.8); }
+.conn-dot-starting { background: var(--warn); animation: pulse 1.2s infinite; }
+.conn-dot-idle, .conn-dot-error, .conn-dot-exited { background: var(--muted); }
+.conn-dot-error, .conn-dot-exited { background: var(--error); }
 
 button {
   background: var(--panel); color: var(--fg); border: 1px solid var(--border);
@@ -167,7 +187,7 @@ button.secondary { background: transparent; }
 .modal input, .modal textarea { width: 100%; background: var(--panel); color: var(--fg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font: inherit; margin-bottom: 12px; }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
 
-.launcher { display: flex; flex-direction: column; height: 100%; flex: 1; min-width: 0; }
+.launcher { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
 .launcher-head { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: var(--bg2); border-bottom: 1px solid var(--border); }
 .launcher-body { flex: 1; overflow-y: auto; max-width: 720px; width: 100%; margin: 0 auto; padding: 32px 24px; }
 .launcher-body h2 { margin: 0 0 6px; }
@@ -185,11 +205,25 @@ button.primary:hover { filter: brightness(1.08); }
 .session-first { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .crumb { display: flex; align-items: baseline; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
 
-.resources-modal, .connectors-modal { width: min(620px, 94vw); max-height: 86vh; display: flex; flex-direction: column; }
+.resources-modal, .connectors-modal, .theme-modal, .model-account-modal { max-height: 86vh; display: flex; flex-direction: column; }
+.resources-modal, .connectors-modal { width: min(620px, 94vw); }
+.model-account-modal { width: min(560px, 94vw); }
 /* Sticky top bar so the Apply/Done actions stay reachable in long menus. */
 .modal-topbar { display: flex; align-items: center; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
 .modal-topbar .modal-title { margin: 0; }
 .modal-scroll { overflow-y: auto; flex: 1; min-height: 0; padding-top: 12px; }
+/* When ModalShell has a footer, keep it from crowding the scroll area. */
+.modal-scroll + .modal-actions { padding-top: 12px; border-top: 1px solid var(--border); margin-top: 4px; }
+/* Global / Project scope switch inside the Skills & Connect modals. */
+.scope-switch { display: inline-flex; gap: 0; margin-bottom: 14px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.scope-switch button { background: transparent; border: none; border-radius: 0; padding: 6px 14px; color: var(--muted); }
+.scope-switch button + button { border-left: 1px solid var(--border); }
+.scope-switch button.active { background: var(--user); color: var(--fg); }
+.scope-switch button:disabled { opacity: 0.4; cursor: default; }
+/* Model rows in the merged Model & account modal. */
+.model-row { width: 100%; text-align: left; background: transparent; border: none; border-bottom: 1px solid var(--border); border-radius: 0; }
+.model-row:hover:not(:disabled) { border-color: transparent; border-bottom-color: var(--border); background: var(--panel); }
+.model-row.active .res-name { color: var(--accent); }
 .loading-row { display: flex; align-items: center; gap: 8px; color: var(--muted); padding: 20px 12px; justify-content: center; }
 .res-error { background: rgba(248,81,73,0.12); border: 1px solid var(--error); color: var(--error); border-radius: 6px; padding: 8px 10px; margin-bottom: 10px; white-space: pre-wrap; font-size: 12px; }
 .res-row { display: flex; align-items: center; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--border); }
