@@ -89,6 +89,9 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; }
 .ctx-home { display: inline-flex; align-items: center; gap: 6px; background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 4px 8px; color: var(--fg); min-width: 0; }
 .ctx-home:hover { background: var(--panel); border-color: var(--border); }
 .ctx-ico { font-size: 13px; line-height: 1; }
+/* Home-screen brand occupies the SAME box as the 🏠 Home button (same padding + border), so
+   the leftmost slot — and the top-bar height — don't shift on home ↔ folder/session. */
+.ctx .brand { display: inline-flex; align-items: center; padding: 4px 8px; border: 1px solid transparent; border-radius: 6px; }
 .ctx-label { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Connection as a live dot next to context: green + glow = sandbox running; amber pulse = starting. */
 .ctx .conn-dot { width: 9px; height: 9px; margin-right: 0; }
