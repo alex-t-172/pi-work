@@ -20,9 +20,15 @@ RUN npm install --omit=dev --no-audit --no-fund
 # Bake the recommended MCP adapter (pi.dev/packages/pi-mcp-adapter) as the connectors
 # engine — remote + OAuth MCP, standard mcp.json config. Extract the package to a PLAIN dir
 # (not under node_modules) so Node 24 can type-strip its index.ts, then install its deps
-# beside it. pi-host loads the extension in-process. Pin the major to avoid surprise breakage.
+# beside it. pi-host loads the extension in-process.
+#
+# PIN AN EXACT VERSION. Floating @2 silently broke us: newer releases (≥2.12) DROPPED
+# typebox / @earendil-works/pi-ai / pi-tui from their package.json (they expect the Pi host
+# to "remap" them to shims), so a standalone bake fails at import with ERR_MODULE_NOT_FOUND
+# and MCP quietly doesn't load. 2.11.0 still DECLARES those as real deps, so `npm install`
+# self-contains it. Bump deliberately (and re-verify the adapter imports) rather than floating.
 RUN mkdir -p /opt/pi-mcp-adapter && cd /opt/pi-mcp-adapter \
-  && npm pack pi-mcp-adapter@2 --silent \
+  && npm pack pi-mcp-adapter@2.11.0 --silent \
   && tar -xzf pi-mcp-adapter-*.tgz --strip-components=1 \
   && rm pi-mcp-adapter-*.tgz \
   && npm install --omit=dev --no-audit --no-fund
