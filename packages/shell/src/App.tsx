@@ -116,7 +116,7 @@ export default function App() {
             connection={b.connection}
             onBack={b.globalMode ? undefined : b.endToSessions}
           />
-          {b.dropped && (
+          {b.dropped && b.connection !== "connected" && b.connection !== "starting" && (
             <div className="reconnect-banner">
               <span>⚠ The sandbox stopped while the app was inactive — your conversation is saved.</span>
               <button className="primary" onClick={() => void b.reconnect()}>⟳ Reconnect</button>

@@ -125,6 +125,7 @@ export function useBridge() {
       switch (channel) {
         case "hello":
           setConnection("connected");
+          setDropped(false); // we're live — never show the reconnect banner while connected
           setHello({ piVersion: p.piVersion, sessionId: p.sessionId });
           window.piwork.send({ id: "get_state", type: "get_state" });
           window.piwork.send({ id: "get_available_models", type: "get_available_models" });

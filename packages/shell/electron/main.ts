@@ -212,7 +212,9 @@ ipcMain.handle("piwork:pickWorkspace", async () => {
 
 async function startSessionFor(workspace: string, session?: string, opts?: { global?: boolean }): Promise<{ ok: boolean; error?: string }> {
   try {
-    await bridge?.stop();
+    // Detach the old bridge before stopping it, so its intentional "exit" (from replacing it,
+    // e.g. during a reconnect) isn't forwarded to the renderer and mistaken for a fresh drop.
+    if (bridge) { const old = bridge; bridge = undefined; old.removeAllListeners(); await old.stop(); }
     bridge = new ContainerBridge();
     wireBridge(bridge);
     const mount = agentMount();
@@ -597,8 +599,8 @@ ipcMain.on("piwork:setTheme", (_e, theme: unknown) => {
 });
 
 ipcMain.handle("piwork:stopSession", async () => {
-  await bridge?.stop();
-  bridge = undefined;
+  // Detach first so the user-initiated stop's "exit" isn't forwarded as a drop.
+  if (bridge) { const old = bridge; bridge = undefined; old.removeAllListeners(); await old.stop(); }
 });
 
 ipcMain.on("piwork:send", (_e, command: Record<string, unknown>) => {
