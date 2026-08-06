@@ -18,10 +18,11 @@ export const THEME_TOKENS = [
   { key: "border", label: "Borders" },
   { key: "muted", label: "Muted text" },
   { key: "user", label: "Your messages" },
+  { key: "code", label: "Code blocks" },
 ] as const;
 
 export type ThemeToken =
-  | "bg" | "bg2" | "panel" | "border" | "fg" | "muted" | "accent" | "user" | "live" | "error" | "warn";
+  | "bg" | "bg2" | "panel" | "border" | "fg" | "muted" | "accent" | "user" | "code" | "live" | "error" | "warn";
 
 export type ThemeColors = Record<ThemeToken, string>;
 
@@ -51,11 +52,11 @@ export interface ThemeState {
 
 /** Built-in colour presets. Each is a COMPLETE set so switching never leaves stale tokens. */
 export const PRESETS: Record<string, ThemeColors> = {
-  Midnight: { bg: "#16181d", bg2: "#1d2027", panel: "#23262e", border: "#2f333c", fg: "#e6e8ec", muted: "#8b909a", accent: "#6ea8fe", user: "#2a3550", live: "#3fb950", error: "#f85149", warn: "#d29922" },
-  Graphite: { bg: "#1a1a1a", bg2: "#212121", panel: "#282828", border: "#383838", fg: "#eaeaea", muted: "#9a9a9a", accent: "#e0895a", user: "#33302b", live: "#7fb950", error: "#f06a6a", warn: "#d8a657" },
-  Light: { bg: "#f7f8fa", bg2: "#eef0f3", panel: "#ffffff", border: "#d8dce2", fg: "#1c1f24", muted: "#6b7280", accent: "#2563eb", user: "#dbe6ff", live: "#1a7f37", error: "#cf222e", warn: "#9a6700" },
-  Sepia: { bg: "#f4ecd8", bg2: "#ece3cc", panel: "#fbf5e6", border: "#ddd0b0", fg: "#3b352a", muted: "#8a7f68", accent: "#b3541e", user: "#e8dcc0", live: "#5a7d2a", error: "#a3311e", warn: "#9a6700" },
-  Matrix: { bg: "#000000", bg2: "#0a0f0a", panel: "#0d160d", border: "#173d17", fg: "#c8facc", muted: "#4f8f57", accent: "#39ff14", user: "#0f2a12", live: "#39ff14", error: "#ff5555", warn: "#e3b341" },
+  Midnight: { bg: "#16181d", bg2: "#1d2027", panel: "#23262e", border: "#2f333c", fg: "#e6e8ec", muted: "#8b909a", accent: "#6ea8fe", user: "#2a3550", code: "#0d0f13", live: "#3fb950", error: "#f85149", warn: "#d29922" },
+  Graphite: { bg: "#1a1a1a", bg2: "#212121", panel: "#282828", border: "#383838", fg: "#eaeaea", muted: "#9a9a9a", accent: "#e0895a", user: "#33302b", code: "#121212", live: "#7fb950", error: "#f06a6a", warn: "#d8a657" },
+  Light: { bg: "#f7f8fa", bg2: "#eef0f3", panel: "#ffffff", border: "#d8dce2", fg: "#1c1f24", muted: "#6b7280", accent: "#2563eb", user: "#dbe6ff", code: "#eef1f4", live: "#1a7f37", error: "#cf222e", warn: "#9a6700" },
+  Sepia: { bg: "#f4ecd8", bg2: "#ece3cc", panel: "#fbf5e6", border: "#ddd0b0", fg: "#3b352a", muted: "#8a7f68", accent: "#b3541e", user: "#e8dcc0", code: "#e8dcc0", live: "#5a7d2a", error: "#a3311e", warn: "#9a6700" },
+  Matrix: { bg: "#000000", bg2: "#0a0f0a", panel: "#0d160d", border: "#173d17", fg: "#c8facc", muted: "#4f8f57", accent: "#39ff14", user: "#0f2a12", code: "#08120a", live: "#39ff14", error: "#ff5555", warn: "#e3b341" },
 };
 
 export const DEFAULT_THEME: ThemeState = { activeId: "preset:Midnight", overrides: {}, userThemes: {} };
@@ -70,11 +71,23 @@ export function baseTheme(state: Pick<ThemeState, "activeId" | "userThemes">): T
   return { colors: PRESETS[name] ?? PRESETS.Midnight, font: FONT_DEFAULT, size: SIZE_DEFAULT };
 }
 
+// Sensible code-block background for a theme that predates the `code` token: a subtle
+// panel that contrasts with the theme's text — light box on a light theme, dark on a dark one.
+function deriveCode(bg: string): string {
+  const h = bg.replace("#", "");
+  if (h.length < 6) return "#0d0f13";
+  const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum > 0.5 ? "#e9ebef" : "#0d0f13";
+}
+
 /** Final theme = base merged with the user's live tweaks. */
 export function resolveTheme(state: ThemeState): Theme {
   const b = baseTheme(state);
   const o = state.overrides ?? {};
-  return { colors: { ...b.colors, ...(o.colors ?? {}) }, font: o.font ?? b.font, size: o.size ?? b.size };
+  const colors = { ...b.colors, ...(o.colors ?? {}) };
+  if (!colors.code) colors.code = deriveCode(colors.bg); // back-fill for pre-`code` saved themes
+  return { colors, font: o.font ?? b.font, size: o.size ?? b.size };
 }
 
 export function hasTweaks(o: ThemeOverrides | undefined): boolean {
