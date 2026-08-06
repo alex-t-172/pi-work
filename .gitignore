@@ -27,3 +27,6 @@ Thumbs.db
 
 # Claude Code agent worktrees / scratch
 .claude/
+
+# internal shipping/OSS plan — local dev artefact, not for the public repo
+docs/shipping-oss-plan.md
