@@ -35,6 +35,11 @@ export function useBridge() {
   const [commands, setCommands] = useState<Array<{ name: string; description?: string; source?: string }>>([]);
   const [sessionTree, setSessionTree] = useState<{ tree: TreeNode[]; leaf: string | null } | null>(null);
   const [mcpStatus, setMcpStatus] = useState<McpStatusEntry[]>([]);
+  // The sandbox exited WITHOUT the user ending it (e.g. the Mac slept and the docker
+  // connection dropped). We keep the session context and offer/auto-do a reconnect instead
+  // of silently bouncing to home. intentionalEnd distinguishes a user-triggered End.
+  const [dropped, setDropped] = useState(false);
+  const intentionalEnd = useRef(false);
   const [treeOpen, setTreeOpen] = useState(false);
   const [rewinding, setRewinding] = useState(false);
   const [injectedText, setInjectedText] = useState<{ text: string; nonce: number } | null>(null);
@@ -156,8 +161,13 @@ export function useBridge() {
           setStderrLog((l) => [...l.slice(-400), String(p)]);
           break;
         case "exit":
-          setConnection("exited");
           setStreaming(false);
+          if (intentionalEnd.current) {
+            intentionalEnd.current = false; // user ended it; endSession owns the connection state
+          } else {
+            setConnection("exited");
+            setDropped(true); // unexpected drop → keep context, offer reconnect
+          }
           break;
         case "error":
           setConnection("error");
@@ -361,6 +371,7 @@ export function useBridge() {
   const startWith = useCallback(async (folder: string, session?: string) => {
     setGlobalMode(false);
     setActiveFolder(folder);
+    setDropped(false);
     setConnection("starting");
     resetSessionState();
     const res = await window.piwork.startSession(folder, session);
@@ -375,6 +386,7 @@ export function useBridge() {
   const startGlobal = useCallback(async (session?: string) => {
     setGlobalMode(true);
     setActiveFolder(null);
+    setDropped(false);
     setConnection("starting");
     resetSessionState();
     const res = await window.piwork.startGlobalSession(session);
@@ -386,11 +398,20 @@ export function useBridge() {
 
   // End the session (kill the sandbox), then choose where to land.
   const endSession = useCallback(async () => {
+    intentionalEnd.current = true; // so the resulting exit isn't treated as a drop
+    setDropped(false);
     await window.piwork.stopSession();
     setConnection("idle");
     resetSessionState();
     void refreshRecent();
   }, [refreshRecent, resetSessionState]);
+
+  // Resume the current context's most recent session after an unexpected drop (the
+  // conversation reloads from disk). Used by the reconnect banner + auto-reconnect on focus.
+  const reconnect = useCallback(() => {
+    if (globalMode) return startGlobal("recent");
+    if (activeFolder) return startWith(activeFolder, "recent");
+  }, [globalMode, activeFolder, startGlobal, startWith]);
   const endToHome = useCallback(async () => {
     await endSession();
     backToFolders();
@@ -470,6 +491,7 @@ export function useBridge() {
     artifacts, artifactsOpen, setArtifactsOpen, lastArtifactKey, commands,
     sessionTree, treeOpen, setTreeOpen, openSessionTree, rewindTo, rewinding, injectedText,
     mcpStatus, setMcpStatus,
+    dropped, reconnect,
     submit, abort, respondDialog, setModel,
     startLogin, chooseProvider, submitLoginInput, closeLogin,
     refreshRecent, pickFolder, selectFolder, backToFolders, startWith, endToHome, endToSessions,

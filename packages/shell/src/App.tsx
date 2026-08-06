@@ -47,7 +47,9 @@ export default function App() {
     for (const m of b.models) set.add(m.provider);
     return [...set];
   }, [b.currentModel, b.models]);
-  const inSession = b.connection === "connected" || b.connection === "starting";
+  // `dropped` keeps us in the session frame after an unexpected sandbox exit (so we can
+  // reconnect in place rather than bouncing to home).
+  const inSession = b.connection === "connected" || b.connection === "starting" || b.dropped;
   const artifactCount = Object.keys(b.artifacts).length;
   const showArtifacts = inSession && b.artifactsOpen && (artifactCount > 0 || openFile !== null);
   const filesRoot = b.activeFolder;
@@ -66,6 +68,15 @@ export default function App() {
   // The drawer's open/closed persists across home ↔ folder ↔ session; only the previewed
   // file is context-specific, so clear it when the session context changes.
   useEffect(() => { setOpenFile(null); }, [inSession]);
+
+  // Auto-reconnect: if the sandbox dropped while we were away (Mac slept, docker connection
+  // lost), resume the session the moment the window regains focus — so tabbing back "just
+  // works". The reconnect banner is the manual fallback.
+  useEffect(() => {
+    const onFocus = () => { if (b.dropped) void b.reconnect(); };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [b.dropped, b.reconnect]);
 
   // Settings zone: shared by home & session. Model/account + Theme + Debug all live on the
   // rail now (variant C: the rail is the whole control surface, the top bar ≈ vanishes).
@@ -105,6 +116,12 @@ export default function App() {
             connection={b.connection}
             onBack={b.globalMode ? undefined : b.endToSessions}
           />
+          {b.dropped && (
+            <div className="reconnect-banner">
+              <span>⚠ The sandbox stopped while the app was inactive — your conversation is saved.</span>
+              <button className="primary" onClick={() => void b.reconnect()}>⟳ Reconnect</button>
+            </div>
+          )}
           <StatusBar statuses={b.statuses} streaming={b.streaming} onAbort={b.abort} />
           <Widgets lines={b.widgets.above} placement="above" />
           <Chat items={b.items} connection={b.connection} />
