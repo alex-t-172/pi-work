@@ -314,3 +314,6 @@ button.primary:hover { filter: brightness(1.08); }
 .debug-drawer header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
 .debug-drawer .path { font-size: 11px; color: var(--muted); padding: 6px 12px; border-bottom: 1px solid var(--border); word-break: break-all; }
 .debug-drawer pre { flex: 1; overflow: auto; margin: 0; padding: 10px 12px; font: 11px/1.5 ui-monospace, Menlo, monospace; color: var(--muted); white-space: pre-wrap; }
+
+.empty-global { text-align: center; max-width: 420px; }
+.empty-global h3 { margin: 0 0 6px; font-size: 15px; color: var(--fg); text-transform: none; letter-spacing: 0; }

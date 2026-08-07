@@ -142,7 +142,7 @@ export default function App() {
           )}
           <StatusBar statuses={b.statuses} streaming={b.streaming} onAbort={b.abort} />
           <Widgets lines={b.widgets.above} placement="above" />
-          <Chat items={b.items} connection={b.connection} />
+          <Chat items={b.items} connection={b.connection} globalMode={b.globalMode} />
           <Widgets lines={b.widgets.below} placement="below" />
           <Composer taRef={composerRef} streaming={b.streaming} disabled={b.connection !== "connected"} onSubmit={b.submit} commands={b.commands} injected={b.injectedText} canAttach={!b.globalMode && !!b.activeFolder} />
         </div>
@@ -253,8 +253,8 @@ function Launcher(props: {
     <div className="launcher">
       {!props.folder ? (
         <div className="launcher-body">
-          <h2>Start working</h2>
-          <p className="muted">Open a folder to work on files in a sandbox, or start a global chat — an assistant with your connectors &amp; skills but no file access. In a global chat you can also ask Piwork to configure itself: add global skills, commands &amp; tools.</p>
+          <h2>Start working on your machine</h2>
+          <p className="muted">Choose a folder to sandbox the agent in, or start a global chat that can't touch your files.</p>
           <div className="folder-actions">
             <button className="primary" onClick={props.onPick}>Open a folder to work in…</button>
             <button className="cta-alt" onClick={props.onNewChat}>New chat</button>
@@ -278,6 +278,7 @@ function Launcher(props: {
           <div className="folder-actions">
             <button className="primary" onClick={() => props.onStart(props.folder!, "new")}>＋ New session</button>
           </div>
+          <p className="muted">The agent is sandboxed to this folder.</p>
           <h3>History</h3>
           {props.sessions === null ? (
             <Loading label="Loading sessions…" />
@@ -793,7 +794,7 @@ function Widgets(props: { lines: Record<string, string[]>; placement: string }) 
   );
 }
 
-function Chat(props: { items: ChatItem[]; connection: string }) {
+function Chat(props: { items: ChatItem[]; connection: string; globalMode: boolean }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true);
@@ -821,9 +822,16 @@ function Chat(props: { items: ChatItem[]; connection: string }) {
   if (props.items.length === 0) {
     return (
       <div className="chat empty" ref={scrollRef} onScroll={onScroll}>
-        <div className="hint">
-          {props.connection === "starting" ? "Starting sandbox…" : "Ready. Type a message below."}
-        </div>
+        {props.connection === "starting" ? (
+          <div className="hint">Starting sandbox…</div>
+        ) : props.globalMode ? (
+          <div className="empty-global">
+            <h3>Global chat</h3>
+            <p className="hint">Chat with your connectors &amp; skills. No files — but you can ask it to add global skills, commands or tools.</p>
+          </div>
+        ) : (
+          <div className="hint">Ready. Type a message below.</div>
+        )}
         <div ref={endRef} />
       </div>
     );
