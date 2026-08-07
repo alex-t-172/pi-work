@@ -13,6 +13,8 @@ import connectorsIcon from "./assets/rail/connectors.png";
 import modelsIcon from "./assets/rail/models.png";
 import themeIcon from "./assets/rail/theme.png";
 import debugIcon from "./assets/rail/debug.png";
+import docsIcon from "./assets/rail/docs.png";
+import rewindIcon from "./assets/rail/rewind.png";
 
 // Curated presets installable in one click (sources are container-side suite paths).
 const SUITE_PRESETS = [
@@ -108,8 +110,8 @@ export default function App() {
     ...(b.globalMode || !filesRoot ? [] : [{ key: "files", iconUrl: fileIcon, label: "Files", title: "Browse workspace files", active: filesOpen, onClick: () => setFilesOpen((v) => !v) } as RailItem]),
     { key: "skills", iconUrl: extensionsIcon, label: "Skills", title: "Manage skills, plugins & extensions", onClick: () => (b.globalMode ? r.openFor("global") : b.activeFolder && r.openFor("project", b.activeFolder)) },
     { key: "connect", iconUrl: connectorsIcon, label: "Connect", title: "Manage MCP connectors (Slack, Notion, …)", onClick: () => (b.globalMode ? c.openFor("global") : b.activeFolder && c.openFor("project", b.activeFolder)) },
-    { key: "docs", iconNode: DocsIcon, label: "Docs", title: "Artifacts & document viewer", badge: artifactCount, active: b.artifactsOpen && artifactCount > 0, onClick: () => b.setArtifactsOpen((v: boolean) => !v) },
-    { key: "rewind", iconNode: RewindIcon, label: "Rewind", disabled: b.streaming, active: b.treeOpen, title: b.streaming ? "Rewind is available when the agent is idle" : "Rewind — jump back to an earlier point", onClick: b.openSessionTree },
+    { key: "docs", iconUrl: docsIcon, label: "Docs", title: "Artifacts & document viewer", badge: artifactCount, active: b.artifactsOpen && artifactCount > 0, onClick: () => b.setArtifactsOpen((v: boolean) => !v) },
+    { key: "rewind", iconUrl: rewindIcon, label: "Rewind", disabled: b.streaming, active: b.treeOpen, title: b.streaming ? "Rewind is available when the agent is idle" : "Rewind — jump back to an earlier point", onClick: b.openSessionTree },
   ];
   const homeTools: RailItem[] = [
     { key: "files", iconUrl: fileIcon, label: "Files", title: "Browse folders — pick where to start a sandbox", active: filesOpen, onClick: () => setFilesOpen((v) => !v) },
@@ -641,19 +643,6 @@ function DebugDrawer(props: { debugLog: string[]; stderrLog: string[]; onClose: 
 // screen and an in-session view each compose their own set; also the intended dock for the
 // Files panel and extension setWidget panels.
 type RailItem = { key: string; iconUrl?: string; iconNode?: React.ReactNode; label: string; onClick: () => void; active?: boolean; disabled?: boolean; title?: string; badge?: number };
-
-// Line-SVG icons for the two rail items with no supplied artwork (Docs, Rewind). currentColor
-// so they follow the rail text colour. Drop-in docs.png/rewind.png later to match the others.
-const DocsIcon = (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 8h8M8 12h8M8 16h5" />
-  </svg>
-);
-const RewindIcon = (
-  <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
-    <path d="M11 6v12L3 12zM21 6v12l-8-6z" />
-  </svg>
-);
 // Left activity rail, variant C: three visually-zoned groups top→bottom —
 //   1. Tools (files/skills/connect/docs/rewind),
 //   2. a divider, then Settings (model/account, theme, debug),
