@@ -104,7 +104,9 @@ export function useBridge() {
       if (m?.role === "user" && text.trim()) items.push({ id: nextId(), role: "user", text });
       else if (m?.role === "assistant" && text.trim()) items.push({ id: nextId(), role: "assistant", text });
     }
-    if (items.length) setItems(items);
+    // Replace unconditionally — a rewind to before an early human message truncates the
+    // conversation to (possibly) empty, and the chat must reflect that, not keep stale messages.
+    setItems(items);
   }, []);
 
   useEffect(() => {
@@ -273,7 +275,10 @@ export function useBridge() {
           setTreeOpen(true);
           if (rewindInFlight.current) {
             // pi-host only re-emits the tree on a SUCCESSFUL rewind (not on cancel), so
-            // this is where we know it worked — apply the human-message prefill now.
+            // this is where we know it worked — reload the chat from the new leaf (this is the
+            // reliable signal, vs a fixed timer that can fire before navigate completes) and
+            // apply the human-message prefill.
+            window.piwork.send({ id: "history", type: "get_messages" });
             if (pendingPrefill.current != null) {
               const text = pendingPrefill.current;
               setInjectedText((prev) => ({ text, nonce: (prev?.nonce ?? 0) + 1 }));
@@ -459,7 +464,8 @@ export function useBridge() {
     pendingPrefill.current = prefill ?? null; // applied only once the rewind succeeds (see sessionTree handler)
     setRewinding(true);
     window.piwork.send({ id: "rewind", type: "prompt", message: `/piwork-rewind ${id}` });
-    setTimeout(() => window.piwork.send({ id: "history", type: "get_messages" }), 900); // refresh chat after rewind
+    // The chat reload now happens when the success tree arrives (see the sessionTree handler),
+    // which is the reliable signal — no fixed timer that could fire before navigate completes.
     setTimeout(() => { // safety: if no fresh tree arrives (e.g. rewind cancelled), don't hang/prefill
       if (rewindInFlight.current) { rewindInFlight.current = false; pendingPrefill.current = null; setRewinding(false); }
     }, 6000);
