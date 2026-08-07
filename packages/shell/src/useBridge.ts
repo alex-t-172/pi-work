@@ -425,19 +425,31 @@ export function useBridge() {
   }, [activeFolder, endSession, selectFolder, backToFolders]);
 
   const submit = useCallback(
-    (text: string, mode: "auto" | "steer" | "followUp") => {
-      if (!text.trim()) return;
-      const isCommand = text.startsWith("/");
-      setItems((prev) => [...prev, { id: nextId(), role: "user", text }]);
+    async (text: string, mode: "auto" | "steer" | "followUp", attachments?: string[]) => {
+      // Attachments: copy the picked host files into the workspace's .attachments/ (host-side,
+      // git-excluded), then reference their workspace paths in the prompt so the agent reads them.
+      let finalText = text;
+      if (attachments && attachments.length > 0 && activeFolder) {
+        const res = await window.piwork.attachFiles(activeFolder, attachments);
+        if (res.ok && res.files.length > 0) {
+          const refs = res.files.map((f) => `\`${f.relPath}\``).join(", ");
+          finalText = `${text.trim() ? `${text.trim()}\n\n` : ""}📎 Attached to the workspace: ${refs}`;
+        } else if (!res.ok) {
+          pushToast(res.error ?? "couldn't attach file(s)", "error");
+        }
+      }
+      if (!finalText.trim()) return;
+      const isCommand = finalText.startsWith("/");
+      setItems((prev) => [...prev, { id: nextId(), role: "user", text: finalText }]);
       if (!streaming || mode === "auto" || isCommand) {
-        window.piwork.send({ id: "prompt", type: "prompt", message: text, streamingBehavior: streaming ? "steer" : undefined });
+        window.piwork.send({ id: "prompt", type: "prompt", message: finalText, streamingBehavior: streaming ? "steer" : undefined });
       } else if (mode === "steer") {
-        window.piwork.send({ id: "steer", type: "steer", message: text });
+        window.piwork.send({ id: "steer", type: "steer", message: finalText });
       } else {
-        window.piwork.send({ id: "follow_up", type: "follow_up", message: text });
+        window.piwork.send({ id: "follow_up", type: "follow_up", message: finalText });
       }
     },
-    [streaming],
+    [streaming, activeFolder, pushToast],
   );
 
   const openSessionTree = useCallback(() => window.piwork.send({ id: "tree", type: "prompt", message: "/piwork-tree" }), []);

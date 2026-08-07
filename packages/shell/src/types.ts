@@ -38,6 +38,12 @@ export interface PiworkApi {
   startLogin(provider?: string): Promise<{ ok: boolean; error?: string }>;
   loginChoose(provider: string): void;
   loginInput(id: string, value: string): void;
+  /** Copy files into the workspace's .attachments/ (git-excluded); returns their workspace paths. */
+  attachFiles(workspace: string, sources: string[]): Promise<{ ok: boolean; error?: string; files: Array<{ name: string; relPath: string }> }>;
+  /** Open a multi-select file picker; returns chosen source paths (or []). */
+  pickAttachFiles(): Promise<string[]>;
+  /** Resolve the host path of a dropped File. */
+  getPathForFile(file: File): string;
   /** List a directory (host-side). Omit dir for the user's home. */
   listDir(dir?: string): Promise<DirListing>;
   /** Read a file (host-side) as a viewer document. */

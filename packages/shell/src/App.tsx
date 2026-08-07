@@ -69,6 +69,15 @@ export default function App() {
   // file is context-specific, so clear it when the session context changes.
   useEffect(() => { setOpenFile(null); }, [inSession]);
 
+  // Prevent a file dropped ANYWHERE outside the composer from navigating the window to it
+  // (Chromium's default). The composer's own onDrop still handles attachments in its region.
+  useEffect(() => {
+    const prevent = (e: DragEvent) => e.preventDefault();
+    window.addEventListener("dragover", prevent);
+    window.addEventListener("drop", prevent);
+    return () => { window.removeEventListener("dragover", prevent); window.removeEventListener("drop", prevent); };
+  }, []);
+
   // Auto-reconnect: if the sandbox dropped while we were away (Mac slept, docker connection
   // lost), resume the session the moment the window regains focus — so tabbing back "just
   // works". The reconnect banner is the manual fallback.
@@ -126,7 +135,7 @@ export default function App() {
           <Widgets lines={b.widgets.above} placement="above" />
           <Chat items={b.items} connection={b.connection} />
           <Widgets lines={b.widgets.below} placement="below" />
-          <Composer taRef={composerRef} streaming={b.streaming} disabled={b.connection !== "connected"} onSubmit={b.submit} commands={b.commands} injected={b.injectedText} />
+          <Composer taRef={composerRef} streaming={b.streaming} disabled={b.connection !== "connected"} onSubmit={b.submit} commands={b.commands} injected={b.injectedText} canAttach={!b.globalMode && !!b.activeFolder} />
         </div>
         {showArtifacts && (
           <ArtifactsPane
@@ -901,13 +910,18 @@ const Composer = (function () {
     taRef: React.RefObject<HTMLTextAreaElement>;
     streaming: boolean;
     disabled: boolean;
-    onSubmit: (text: string, mode: "auto" | "steer" | "followUp") => void;
+    onSubmit: (text: string, mode: "auto" | "steer" | "followUp", attachments?: string[]) => void;
     commands: Array<{ name: string; description?: string; source?: string }>;
     injected: { text: string; nonce: number } | null;
+    canAttach: boolean; // false in global chat (no folder to copy into)
   }) {
     const [text, setText] = useState("");
     const [sel, setSel] = useState(0);
     const [dismissed, setDismissed] = useState(false);
+    // Pending attachments (host source paths) — copied into .attachments/ on send, not now,
+    // so removing a chip or not sending leaves no orphan files.
+    const [attachments, setAttachments] = useState<Array<{ name: string; path: string }>>([]);
+    const [dragOver, setDragOver] = useState(false);
     // null = auto-grow with content (up to AUTO_MAX). A number = height the user dragged to
     // (sticky across sends), so long prompts stay big and editable; content scrolls within.
     const [dragHeight, setDragHeight] = useState<number | null>(null);
@@ -962,17 +976,47 @@ const Composer = (function () {
       setSel(0);
       props.taRef.current?.focus();
     };
+    const addAttachments = (paths: string[]) => {
+      const add = paths.filter((p) => p && !attachments.some((a) => a.path === p)).map((p) => ({ name: p.split("/").pop() || p, path: p }));
+      if (add.length) setAttachments((prev) => [...prev, ...add]);
+    };
+    const pickAttach = async () => { addAttachments(await window.piwork.pickAttachFiles()); props.taRef.current?.focus(); };
+    const removeAttachment = (path: string) => setAttachments((prev) => prev.filter((a) => a.path !== path));
+    const onDrop = (e: React.DragEvent) => {
+      e.preventDefault(); setDragOver(false);
+      if (!props.canAttach) return;
+      const paths = Array.from(e.dataTransfer.files).map((f) => window.piwork.getPathForFile(f)).filter(Boolean);
+      addAttachments(paths);
+    };
+
     const submit = (mode: "auto" | "steer" | "followUp") => {
-      props.onSubmit(text, mode);
+      if (!text.trim() && attachments.length === 0) return;
+      props.onSubmit(text, mode, attachments.length ? attachments.map((a) => a.path) : undefined);
       setText("");
+      setAttachments([]);
       setDismissed(false);
       setSel(0);
       // keep a user-dragged height across sends; the effect resizes when it's auto
     };
 
     return (
-      <div className="composer">
+      <div
+        className={`composer${dragOver ? " drag-over" : ""}`}
+        onDragOver={props.canAttach ? (e) => { e.preventDefault(); setDragOver(true); } : undefined}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={props.canAttach ? onDrop : undefined}
+      >
         <div className="composer-resizer" onMouseDown={startResize} title="Drag to resize the input" />
+        {props.canAttach && attachments.length > 0 && (
+          <div className="attach-chips">
+            {attachments.map((a) => (
+              <span key={a.path} className="attach-chip" title={a.path}>
+                📎 {a.name}
+                <button className="attach-x" onClick={() => removeAttachment(a.path)} title="Remove">✕</button>
+              </span>
+            ))}
+          </div>
+        )}
         <div className="composer-input">
           {open && (
             <div className="cmd-menu">
@@ -1010,7 +1054,10 @@ const Composer = (function () {
             }}
           />
         </div>
-        <button disabled={props.disabled || !text.trim()} onClick={() => submit(props.streaming ? "steer" : "auto")}>
+        {props.canAttach && (
+          <button className="secondary attach-btn" disabled={props.disabled} onClick={pickAttach} title="Attach a file (copied into the workspace)">📎</button>
+        )}
+        <button disabled={props.disabled || (!text.trim() && attachments.length === 0)} onClick={() => submit(props.streaming ? "steer" : "auto")}>
           {props.streaming ? "Steer" : "Send"}
         </button>
       </div>

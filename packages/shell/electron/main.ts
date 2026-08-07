@@ -340,6 +340,66 @@ ipcMain.handle("piwork:reloadSession", async () => {
 ipcMain.handle("piwork:getConfig", () => getConfig());
 ipcMain.handle("piwork:setConfig", (_e, patch: Record<string, unknown>) => setConfig(patch));
 
+// ── File attach ("upload") ─────────────────────────────────────────────────────────
+// Bring a file in from anywhere → copy it into the workspace's .attachments/ staging tray
+// (the workspace is bind-mounted, so it appears in the container instantly). Kept out of git
+// LOCALLY via .git/info/exclude (not the tracked .gitignore — a personal staging tray isn't a
+// team convention). The agent reads the file from its workspace path; "promote to keep" =
+// move it out of .attachments/ (then git tracks it normally).
+const ATTACH_DIR = ".attachments";
+function ensureAttachExcluded(workspace: string): void {
+  try {
+    // Only for git repos; find the exact exclude file (robust to worktrees/submodules).
+    const inside = spawnSyncGit(workspace, ["rev-parse", "--is-inside-work-tree"]);
+    if (inside.trim() !== "true") return;
+    let excludeRel = spawnSyncGit(workspace, ["rev-parse", "--git-path", "info/exclude"]).trim();
+    if (!excludeRel) return;
+    const excludePath = path.isAbsolute(excludeRel) ? excludeRel : path.join(workspace, excludeRel);
+    let cur = "";
+    try { cur = fs.readFileSync(excludePath, "utf8"); } catch { /* may not exist yet */ }
+    if (cur.split(/\r?\n/).some((l) => l.trim() === `${ATTACH_DIR}/` || l.trim() === ATTACH_DIR)) return; // already excluded
+    fs.mkdirSync(path.dirname(excludePath), { recursive: true });
+    fs.appendFileSync(excludePath, `${cur && !cur.endsWith("\n") ? "\n" : ""}# Piwork brought-in files (local, not shared)\n${ATTACH_DIR}/\n`);
+    log(`attach: excluded ${ATTACH_DIR}/ via ${excludePath}`);
+  } catch (e) {
+    log(`attach: git-exclude skipped: ${String(e)}`); // never fail an upload over ignore bookkeeping
+  }
+}
+function spawnSyncGit(cwd: string, args: string[]): string {
+  const { spawnSync } = require("node:child_process") as typeof import("node:child_process");
+  const r = spawnSync("git", ["-C", cwd, ...args], { encoding: "utf8" });
+  return r.status === 0 ? String(r.stdout) : "";
+}
+/** Copy files into <workspace>/.attachments/, de-duping names; return workspace-relative paths. */
+ipcMain.handle("piwork:attachFiles", (_e, workspace: string, sources: string[]) => {
+  try {
+    if (!workspace) return { ok: false, error: "no workspace", files: [] };
+    const dir = path.join(workspace, ATTACH_DIR);
+    fs.mkdirSync(dir, { recursive: true });
+    ensureAttachExcluded(workspace);
+    const files: Array<{ name: string; relPath: string }> = [];
+    for (const src of sources) {
+      try {
+        const base = path.basename(src);
+        let name = base;
+        // De-dupe: foo.png → foo-2.png → foo-3.png …
+        const ext = path.extname(base); const stem = base.slice(0, base.length - ext.length);
+        for (let n = 2; fs.existsSync(path.join(dir, name)); n++) name = `${stem}-${n}${ext}`;
+        fs.copyFileSync(src, path.join(dir, name));
+        files.push({ name, relPath: `${ATTACH_DIR}/${name}` });
+      } catch (e) { log(`attach: copy failed for ${src}: ${String(e)}`); }
+    }
+    return files.length ? { ok: true, files } : { ok: false, error: "nothing copied", files: [] };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err), files: [] };
+  }
+});
+/** Open a multi-select file picker; returns chosen source paths (or []). */
+ipcMain.handle("piwork:pickAttachFiles", async () => {
+  const res = await dialog.showOpenDialog({ properties: ["openFile", "multiSelections"] });
+  return res.canceled ? [] : res.filePaths;
+});
+
 // ── Host-side file viewing ────────────────────────────────────────────────────────
 // The workspace is the user's own folder (bind-mounted into the container), so the
 // main process reads it directly — no container round-trip, and it works before/after a

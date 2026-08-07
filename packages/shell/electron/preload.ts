@@ -5,7 +5,7 @@
  * so it has no Node access. We expose a small, explicit, serializable-only API on
  * `window.piwork` via contextBridge. Nothing else crosses the boundary.
  */
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 
 export interface PiworkApi {
   /** Open the folder picker; resolves to the chosen workspace path (or null). */
@@ -60,6 +60,12 @@ export interface PiworkApi {
   loginChoose(provider: string): void;
   /** Answer a login prompt/select by request id. */
   loginInput(id: string, value: string): void;
+  /** Copy files into the workspace's .attachments/ (git-excluded); returns their workspace paths. */
+  attachFiles(workspace: string, sources: string[]): Promise<{ ok: boolean; error?: string; files: Array<{ name: string; relPath: string }> }>;
+  /** Open a multi-select file picker; returns chosen source paths (or []). */
+  pickAttachFiles(): Promise<string[]>;
+  /** Resolve the host path of a dropped File (Electron ≥32 removed File.path). */
+  getPathForFile(file: File): string;
   /** List a directory (host-side). Omit dir for the user's home. */
   listDir(dir?: string): Promise<{ ok: boolean; path: string; parent: string | null; entries: Array<{ name: string; path: string; isDir: boolean; size: number }>; error?: string }>;
   /** Read a file (host-side) as a viewer document. */
@@ -99,6 +105,9 @@ const api: PiworkApi = {
   startLogin: (provider) => ipcRenderer.invoke("piwork:startLogin", provider),
   loginChoose: (provider) => ipcRenderer.send("piwork:loginChoose", provider),
   loginInput: (id, value) => ipcRenderer.send("piwork:loginInput", id, value),
+  attachFiles: (workspace, sources) => ipcRenderer.invoke("piwork:attachFiles", workspace, sources),
+  pickAttachFiles: () => ipcRenderer.invoke("piwork:pickAttachFiles"),
+  getPathForFile: (file) => webUtils.getPathForFile(file),
   listDir: (dir) => ipcRenderer.invoke("piwork:listDir", dir),
   readFile: (p) => ipcRenderer.invoke("piwork:readFile", p),
 };
