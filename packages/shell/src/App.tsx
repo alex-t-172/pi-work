@@ -674,14 +674,14 @@ function ActivityRail(props: { tools: RailItem[]; settings: RailItem[]; anchor?:
 // Variant C: the top bar is reduced to a non-interactive status line — a small context
 // label + a colored connection dot. No buttons: every control now lives on the rail.
 // One top bar for every screen — a stable frame. Order (left → right):
-//   🏠 Home  ·  <folder / context>  ·  🟢 live dot  ·  ◀ End session
+//   Home  ·  <folder/context>  ·  live dot  ·  End session
 // Home is pinned LEFTMOST so it never moves between the folder screen and a session; on the
 // true home screen the slot is the "Piwork" brand instead (you're already home). The ◀ back
 // sits to the RIGHT of the folder name, so the arrow points back at where it takes you (that
 // folder's sessions) — and it's labelled to make clear leaving stops the sandbox. The dot +
 // ◀ appear only in-session (a sandbox is running). Model/account lives on the rail.
 function TopBar(props: {
-  onHome?: () => void;   // present → "🏠 Home" (leftmost); absent → "Piwork" brand (home screen)
+  onHome?: () => void;   // present → "Home" (leftmost); absent → "Piwork" brand (home screen)
   folderName?: string;   // context label (a folder, or "Global chat")
   folderPath?: string;   // tooltip on the folder name
   connection?: string;   // present → live dot (in-session)
@@ -697,7 +697,10 @@ function TopBar(props: {
       <div className="ctx">
         {props.onHome ? (
           <button className="ctx-home" onClick={props.onHome} title={homeTitle}>
-            <span className="ctx-ico">🏠</span> Home
+            <svg className="ctx-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M3 11l9-8 9 8" /><path d="M5 10v10h14V10" />
+            </svg>
+            Home
           </button>
         ) : (
           <span className="brand">Piwork</span>

@@ -85,14 +85,14 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; }
 .conn-starting { color: var(--warn); }
 
 /* In-session top bar (variant A structure): leaving on the LEFT — ◀ End (stops the sandbox)
-   + a live dot + the 🏠 folder (→ home). Model/account lives on the rail. */
+   + a live dot + the folder (→ home). Model/account lives on the rail. */
 .ctx { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .ctx-back { display: inline-flex; align-items: center; gap: 5px; background: transparent; border: 1px solid var(--border); border-radius: 6px; color: var(--fg); padding: 4px 10px; font-size: 13px; }
 .ctx-back:hover:not(:disabled) { border-color: var(--error); color: var(--error); } /* reads as "stop" */
 .ctx-home { display: inline-flex; align-items: center; gap: 6px; background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 4px 8px; color: var(--fg); min-width: 0; }
 .ctx-home:hover { background: var(--panel); border-color: var(--border); }
-.ctx-ico { font-size: 13px; line-height: 1; }
-/* Home-screen brand occupies the SAME box as the 🏠 Home button (same padding + border), so
+.ctx-ico { width: 15px; height: 15px; flex-shrink: 0; }
+/* Home-screen brand occupies the SAME box as the Home button (same padding + border), so
    the leftmost slot — and the top-bar height — don't shift on home ↔ folder/session. */
 .ctx .brand { display: inline-flex; align-items: center; padding: 4px 8px; border: 1px solid transparent; border-radius: 6px; }
 .ctx-label { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
