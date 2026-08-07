@@ -91,7 +91,6 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; }
 .ctx-back:hover:not(:disabled) { border-color: var(--error); color: var(--error); } /* reads as "stop" */
 .ctx-home { display: inline-flex; align-items: center; gap: 6px; background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 4px 8px; color: var(--fg); min-width: 0; }
 .ctx-home:hover { background: var(--panel); border-color: var(--border); }
-.ctx-ico { width: 15px; height: 15px; flex-shrink: 0; }
 /* Home-screen brand occupies the SAME box as the Home button (same padding + border), so
    the leftmost slot — and the top-bar height — don't shift on home ↔ folder/session. */
 .ctx .brand { display: inline-flex; align-items: center; padding: 4px 8px; border: 1px solid transparent; border-radius: 6px; }
