@@ -433,7 +433,7 @@ export function useBridge() {
         const res = await window.piwork.attachFiles(activeFolder, attachments);
         if (res.ok && res.files.length > 0) {
           const refs = res.files.map((f) => `\`${f.relPath}\``).join(", ");
-          finalText = `${text.trim() ? `${text.trim()}\n\n` : ""}📎 Attached to the workspace: ${refs}`;
+          finalText = `${text.trim() ? `${text.trim()}\n\n` : ""}Attached to the workspace: ${refs}`;
         } else if (!res.ok) {
           pushToast(res.error ?? "couldn't attach file(s)", "error");
         }

@@ -6,6 +6,13 @@ import { useResources } from "./useResources.ts";
 import { useConnectors } from "./useConnectors.ts";
 import { FONT_OPTIONS, hasTweaks, PRESETS, resolveTheme, SIZE_MAX, SIZE_MIN, THEME_TOKENS } from "./theme.ts";
 import type { ChatItem, DirEntry, FileContent, LoginState, McpServer, McpStatusEntry, PackageItem, ResourceItem, ResourceList, SessionMeta, UiDialog } from "./types.ts";
+// Rail icons — real artwork instead of emoji (Vite bundles + hashes these).
+import fileIcon from "./assets/rail/file.png";
+import extensionsIcon from "./assets/rail/extensions.png";
+import connectorsIcon from "./assets/rail/connectors.png";
+import modelsIcon from "./assets/rail/models.png";
+import themeIcon from "./assets/rail/theme.png";
+import debugIcon from "./assets/rail/debug.png";
 
 // Curated presets installable in one click (sources are container-side suite paths).
 const SUITE_PRESETS = [
@@ -90,24 +97,24 @@ export default function App() {
   // Settings zone: shared by home & session. Model/account + Theme + Debug all live on the
   // rail now (variant C: the rail is the whole control surface, the top bar ≈ vanishes).
   const settingsRail: RailItem[] = [
-    { key: "model", icon: "🧠", label: "Model", onClick: () => setShowModelAccount(true), title: "Model & account" },
-    { key: "theme", icon: "🎨", label: "Theme", onClick: () => setShowTheme(true), title: "Theme" },
-    { key: "debug", icon: "🐞", label: "Debug", onClick: () => setShowDebug((v) => !v), title: "Debug drawer" },
+    { key: "model", iconUrl: modelsIcon, label: "Model", onClick: () => setShowModelAccount(true), title: "Model & account" },
+    { key: "theme", iconUrl: themeIcon, label: "Theme", onClick: () => setShowTheme(true), title: "Theme" },
+    { key: "debug", iconUrl: debugIcon, label: "Debug", onClick: () => setShowDebug((v) => !v), title: "Debug drawer" },
   ];
   // Tools zone (in-session): the panels/viewers for the running sandbox. Scope for Skills /
   // Connect is chosen inside the modal, so one entry each does both global & project.
   const sessionTools: RailItem[] = [
     // Files: only a real workspace has files (the folderless global chat has none).
-    ...(b.globalMode || !filesRoot ? [] : [{ key: "files", icon: "📁", label: "Files", title: "Browse workspace files", active: filesOpen, onClick: () => setFilesOpen((v) => !v) } as RailItem]),
-    { key: "skills", icon: "🧩", label: "Skills", title: "Manage skills, plugins & extensions", onClick: () => (b.globalMode ? r.openFor("global") : b.activeFolder && r.openFor("project", b.activeFolder)) },
-    { key: "connect", icon: "🔌", label: "Connect", title: "Manage MCP connectors (Slack, Notion, …)", onClick: () => (b.globalMode ? c.openFor("global") : b.activeFolder && c.openFor("project", b.activeFolder)) },
-    { key: "docs", icon: "🖼", label: "Docs", title: "Artifacts & document viewer", badge: artifactCount, active: b.artifactsOpen && artifactCount > 0, onClick: () => b.setArtifactsOpen((v: boolean) => !v) },
-    { key: "rewind", icon: "⏪", label: "Rewind", disabled: b.streaming, active: b.treeOpen, title: b.streaming ? "Rewind is available when the agent is idle" : "Rewind — jump back to an earlier point", onClick: b.openSessionTree },
+    ...(b.globalMode || !filesRoot ? [] : [{ key: "files", iconUrl: fileIcon, label: "Files", title: "Browse workspace files", active: filesOpen, onClick: () => setFilesOpen((v) => !v) } as RailItem]),
+    { key: "skills", iconUrl: extensionsIcon, label: "Skills", title: "Manage skills, plugins & extensions", onClick: () => (b.globalMode ? r.openFor("global") : b.activeFolder && r.openFor("project", b.activeFolder)) },
+    { key: "connect", iconUrl: connectorsIcon, label: "Connect", title: "Manage MCP connectors (Slack, Notion, …)", onClick: () => (b.globalMode ? c.openFor("global") : b.activeFolder && c.openFor("project", b.activeFolder)) },
+    { key: "docs", iconNode: DocsIcon, label: "Docs", title: "Artifacts & document viewer", badge: artifactCount, active: b.artifactsOpen && artifactCount > 0, onClick: () => b.setArtifactsOpen((v: boolean) => !v) },
+    { key: "rewind", iconNode: RewindIcon, label: "Rewind", disabled: b.streaming, active: b.treeOpen, title: b.streaming ? "Rewind is available when the agent is idle" : "Rewind — jump back to an earlier point", onClick: b.openSessionTree },
   ];
   const homeTools: RailItem[] = [
-    { key: "files", icon: "📁", label: "Files", title: "Browse folders — pick where to start a sandbox", active: filesOpen, onClick: () => setFilesOpen((v) => !v) },
-    { key: "skills", icon: "🧩", label: "Skills", title: "Skills, plugins & extensions", onClick: () => r.openFor("global") },
-    { key: "connect", icon: "🔌", label: "Connect", title: "MCP connectors (Slack, Notion, …)", onClick: () => c.openFor("global") },
+    { key: "files", iconUrl: fileIcon, label: "Files", title: "Browse folders — pick where to start a sandbox", active: filesOpen, onClick: () => setFilesOpen((v) => !v) },
+    { key: "skills", iconUrl: extensionsIcon, label: "Skills", title: "Skills, plugins & extensions", onClick: () => r.openFor("global") },
+    { key: "connect", iconUrl: connectorsIcon, label: "Connect", title: "MCP connectors (Slack, Notion, …)", onClick: () => c.openFor("global") },
   ];
   return (
     <div className="app">
@@ -248,7 +255,7 @@ function Launcher(props: {
           <p className="muted">Open a folder to work on files in a sandbox, or start a global chat — an assistant with your connectors &amp; skills but no file access. In a global chat you can also ask Piwork to configure itself: add global skills, commands &amp; tools.</p>
           <div className="folder-actions">
             <button className="primary" onClick={props.onPick}>Open a folder to work in…</button>
-            <button className="secondary" onClick={props.onNewChat}>💬 New chat</button>
+            <button className="cta-alt" onClick={props.onNewChat}>New chat</button>
           </div>
           {props.recentFolders.length > 0 && (
             <>
@@ -633,7 +640,20 @@ function DebugDrawer(props: { debugLog: string[]; stderrLog: string[]; onClose: 
 // captions (friendly for non-devs), active-state highlighting. Item-driven so the home
 // screen and an in-session view each compose their own set; also the intended dock for the
 // Files panel and extension setWidget panels.
-type RailItem = { key: string; icon: string; label: string; onClick: () => void; active?: boolean; disabled?: boolean; title?: string; badge?: number };
+type RailItem = { key: string; iconUrl?: string; iconNode?: React.ReactNode; label: string; onClick: () => void; active?: boolean; disabled?: boolean; title?: string; badge?: number };
+
+// Line-SVG icons for the two rail items with no supplied artwork (Docs, Rewind). currentColor
+// so they follow the rail text colour. Drop-in docs.png/rewind.png later to match the others.
+const DocsIcon = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 8h8M8 12h8M8 16h5" />
+  </svg>
+);
+const RewindIcon = (
+  <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
+    <path d="M11 6v12L3 12zM21 6v12l-8-6z" />
+  </svg>
+);
 // Left activity rail, variant C: three visually-zoned groups top→bottom —
 //   1. Tools (files/skills/connect/docs/rewind),
 //   2. a divider, then Settings (model/account, theme, debug),
@@ -647,7 +667,7 @@ function ActivityRail(props: { tools: RailItem[]; settings: RailItem[]; anchor?:
       disabled={it.disabled}
       title={it.title ?? it.label}
     >
-      <span className="rail-ico">{it.icon}</span>{it.label}
+      <span className="rail-ico">{it.iconUrl ? <img className="rail-img" src={it.iconUrl} alt="" /> : it.iconNode}</span>{it.label}
       {it.badge != null && it.badge > 0 && <span className="rail-badge">{it.badge}</span>}
     </button>
   );
@@ -1011,7 +1031,7 @@ const Composer = (function () {
           <div className="attach-chips">
             {attachments.map((a) => (
               <span key={a.path} className="attach-chip" title={a.path}>
-                📎 {a.name}
+                {a.name}
                 <button className="attach-x" onClick={() => removeAttachment(a.path)} title="Remove">✕</button>
               </span>
             ))}
@@ -1055,7 +1075,7 @@ const Composer = (function () {
           />
         </div>
         {props.canAttach && (
-          <button className="secondary attach-btn" disabled={props.disabled} onClick={pickAttach} title="Attach a file (copied into the workspace)">📎</button>
+          <button className="secondary attach-btn" disabled={props.disabled} onClick={pickAttach} title="Attach a file (copied into the workspace)" aria-label="Attach a file">+</button>
         )}
         <button disabled={props.disabled || (!text.trim() && attachments.length === 0)} onClick={() => submit(props.streaming ? "steer" : "auto")}>
           {props.streaming ? "Steer" : "Send"}
