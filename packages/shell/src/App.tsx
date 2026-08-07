@@ -253,7 +253,7 @@ function Launcher(props: {
     <div className="launcher">
       {!props.folder ? (
         <div className="launcher-body">
-          <h2>Start working on your machine</h2>
+          <h2>Work locally, stay in control</h2>
           <p className="muted">Choose a folder to sandbox the agent in, or start a global chat that can't touch your files.</p>
           <div className="folder-actions">
             <button className="primary" onClick={props.onPick}>Open a folder to work in…</button>
