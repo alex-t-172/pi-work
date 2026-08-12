@@ -1367,6 +1367,41 @@ function ConnectorsModal(props: { c: ReturnType<typeof useConnectors>; inSession
 // Merged model + provider control (shared move #1): ONE entry point that both picks the
 // active model (from the connected providers' models, highlighting the current one) and
 // connects/manages providers. Reached from the rail's Settings zone (🧠 Model).
+// Add a model the pinned Pi SDK doesn't list yet (e.g. a just-released Opus) — writes it into
+// models.json under the chosen provider (reusing that provider's login) and reloads.
+function AddModel(props: { defaultProvider: string }) {
+  const [open, setOpen] = useState(false);
+  const [provider, setProvider] = useState(props.defaultProvider);
+  const [id, setId] = useState("");
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const submit = async () => {
+    if (!id.trim()) return;
+    setBusy(true); setErr(null);
+    const r = await window.piwork.addModel({ provider: provider.trim(), id: id.trim(), name: name.trim() || undefined });
+    setBusy(false);
+    if (r.ok) { setId(""); setName(""); setOpen(false); } // the reload re-emits the list; the new model appears
+    else setErr(r.error ?? "couldn't add model");
+  };
+  if (!open) return <button className="link add-model-open" onClick={() => setOpen(true)}>+ Add a model Pi doesn't list yet</button>;
+  return (
+    <div className="add-model">
+      <div className="muted">For a model the Pi SDK doesn't know yet (e.g. a new Opus). Reuses your provider's login and reloads the session.</div>
+      <div className="kv-row">
+        <input placeholder="provider (e.g. anthropic)" value={provider} onChange={(e) => setProvider(e.target.value)} />
+        <input placeholder="model id (e.g. claude-opus-5)" value={id} onChange={(e) => setId(e.target.value)} />
+      </div>
+      <input placeholder="display name (optional)" value={name} onChange={(e) => setName(e.target.value)} />
+      {err && <div className="res-error">{err}</div>}
+      <div className="modal-actions">
+        <button className="primary" disabled={!id.trim() || busy} onClick={submit}>{busy ? "Adding…" : "Add model"}</button>
+        <button className="secondary" onClick={() => setOpen(false)}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
 function ModelAccountModal(props: {
   models: { provider: string; id: string }[];
   currentModel: { provider: string; id: string } | null;
@@ -1410,6 +1445,8 @@ function ModelAccountModal(props: {
           ) : (
             <div className="muted">No models available yet.</div>
           )}
+
+          <AddModel defaultProvider={cur?.provider ?? props.connected[0] ?? "anthropic"} />
 
           <div className="theme-section">Providers</div>
           <div className="options">

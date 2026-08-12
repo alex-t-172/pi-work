@@ -11,7 +11,7 @@
  * forwarded to the renderer to render.
  */
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import * as path from "node:path";
 import * as os from "node:os";
 import * as fs from "node:fs";
@@ -339,6 +339,51 @@ ipcMain.handle("piwork:reloadSession", async () => {
 });
 ipcMain.handle("piwork:getConfig", () => getConfig());
 ipcMain.handle("piwork:setConfig", (_e, patch: Record<string, unknown>) => setConfig(patch));
+
+// Add (or update) a custom model in the agent store's models.json, then restart the session
+// so its ModelRegistry re-reads it. Lets you use a model the pinned Pi SDK doesn't list yet
+// (e.g. a just-released Opus) without waiting for an SDK bump: it merges into the built-in
+// provider by id and reuses that provider's existing OAuth / API-key auth.
+function mergeModel(json: Record<string, any>, provider: string, model: Record<string, unknown>): void {
+  json.providers = json.providers && typeof json.providers === "object" ? json.providers : {};
+  const p = json.providers[provider] && typeof json.providers[provider] === "object" ? json.providers[provider] : (json.providers[provider] = {});
+  p.models = Array.isArray(p.models) ? p.models : [];
+  const i = p.models.findIndex((x: any) => x && x.id === (model as { id: string }).id);
+  if (i >= 0) p.models[i] = model; else p.models.push(model);
+}
+ipcMain.handle("piwork:addModel", async (_e, m: { provider?: string; id?: string; name?: string }) => {
+  try {
+    const provider = String(m?.provider ?? "").trim();
+    const id = String(m?.id ?? "").trim();
+    if (!provider || !id) return { ok: false, error: "provider and model id are required" };
+    const model: Record<string, unknown> = {
+      id,
+      ...(m?.name?.trim() ? { name: m.name.trim() } : {}),
+      reasoning: true, input: ["text", "image"], contextWindow: 200000, maxTokens: 64000,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, // display only; unknown for a custom model
+    };
+    const mount = agentMount();
+    if (mount.agentHostDir) {
+      const p = path.join(mount.agentHostDir, "models.json");
+      let json: Record<string, any> = {};
+      try { json = JSON.parse(fs.readFileSync(p, "utf8")); } catch { /* new file */ }
+      mergeModel(json, provider, model);
+      fs.mkdirSync(mount.agentHostDir, { recursive: true });
+      fs.writeFileSync(p, JSON.stringify(json, null, 2));
+    } else {
+      // Prod volume: main can't fs-touch a docker volume, so merge via a throwaway container.
+      const script = "const fs=require('fs');const P='/root/.pi/agent/models.json';let j={};try{j=JSON.parse(fs.readFileSync(P,'utf8'))}catch{};const {provider,model}=JSON.parse(process.env.PW);j.providers=(j.providers&&typeof j.providers==='object')?j.providers:{};const p=(j.providers[provider]&&typeof j.providers[provider]==='object')?j.providers[provider]:(j.providers[provider]={});p.models=Array.isArray(p.models)?p.models:[];const i=p.models.findIndex(x=>x&&x.id===model.id);i>=0?(p.models[i]=model):p.models.push(model);fs.writeFileSync(P,JSON.stringify(j,null,2));";
+      const r = spawnSync(DOCKER, ["run", "--rm", "--entrypoint", "node", "-e", `PW=${JSON.stringify({ provider, model })}`, IMAGE, "-e", script], { encoding: "utf8" });
+      if (r.status !== 0) return { ok: false, error: `write failed: ${r.stderr || r.status}` };
+    }
+    log(`addModel: ${provider}/${id} → models.json`);
+    // Re-read models.json: restart the live session so the ModelRegistry picks up the new model.
+    if (bridge && lastAgent) await startSessionFor(lastAgent.workspace, "recent");
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+});
 
 // ── File attach ("upload") ─────────────────────────────────────────────────────────
 // Bring a file in from anywhere → copy it into the workspace's .attachments/ staging tray

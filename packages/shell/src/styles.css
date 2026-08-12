@@ -317,3 +317,9 @@ button.primary:hover { filter: brightness(1.08); }
 
 .empty-global { text-align: center; max-width: 420px; }
 .empty-global h3 { margin: 0 0 6px; font-size: 15px; color: var(--fg); text-transform: none; letter-spacing: 0; }
+
+/* Add-a-model form in the Model & account panel */
+.add-model-open { display: inline-block; margin: 4px 0 2px; }
+.add-model { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
+.add-model .kv-row { display: flex; gap: 8px; }
+.add-model input { flex: 1; min-width: 0; background: var(--bg2); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 9px; }

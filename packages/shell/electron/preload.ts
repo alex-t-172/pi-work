@@ -60,6 +60,8 @@ export interface PiworkApi {
   loginChoose(provider: string): void;
   /** Answer a login prompt/select by request id. */
   loginInput(id: string, value: string): void;
+  /** Add/update a custom model in models.json (merges into a provider, reuses its auth), then reload. */
+  addModel(model: { provider: string; id: string; name?: string }): Promise<{ ok: boolean; error?: string }>;
   /** Copy files into the workspace's .attachments/ (git-excluded); returns their workspace paths. */
   attachFiles(workspace: string, sources: string[]): Promise<{ ok: boolean; error?: string; files: Array<{ name: string; relPath: string }> }>;
   /** Open a multi-select file picker; returns chosen source paths (or []). */
@@ -105,6 +107,7 @@ const api: PiworkApi = {
   startLogin: (provider) => ipcRenderer.invoke("piwork:startLogin", provider),
   loginChoose: (provider) => ipcRenderer.send("piwork:loginChoose", provider),
   loginInput: (id, value) => ipcRenderer.send("piwork:loginInput", id, value),
+  addModel: (model) => ipcRenderer.invoke("piwork:addModel", model),
   attachFiles: (workspace, sources) => ipcRenderer.invoke("piwork:attachFiles", workspace, sources),
   pickAttachFiles: () => ipcRenderer.invoke("piwork:pickAttachFiles"),
   getPathForFile: (file) => webUtils.getPathForFile(file),
