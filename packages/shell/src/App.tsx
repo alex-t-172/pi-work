@@ -13,13 +13,12 @@ import connectorsIcon from "./assets/rail/connectors.png";
 import modelsIcon from "./assets/rail/models.png";
 import themeIcon from "./assets/rail/theme.png";
 import debugIcon from "./assets/rail/debug.png";
-import docsIcon from "./assets/rail/docs.png";
 import rewindIcon from "./assets/rail/rewind.png";
 
 // Curated presets installable in one click (sources are container-side suite paths).
 const SUITE_PRESETS = [
   { name: "Checkpoint", source: "/opt/piwork-suite/piwork-checkpoint", dir: "piwork-checkpoint", desc: "Git auto-commit before each turn (safety net)" },
-  { name: "Artifacts", source: "/opt/piwork-suite/piwork-artifacts", dir: "piwork-artifacts", desc: "Auto-preview files written to .artifacts/ (HTML/Markdown/text)" },
+  { name: "Artifacts", source: "/opt/piwork-suite/piwork-artifacts", dir: "piwork-artifacts", desc: "Lets the agent present a finished file or view in the viewer (installed by default)" },
   { name: "Tasks", source: "/opt/piwork-suite/piwork-tasks", dir: "piwork-tasks", desc: "A task list the agent maintains, shown as a docked widget" },
   { name: "Ask", source: "/opt/piwork-suite/piwork-ask", dir: "piwork-ask", desc: "Lets the agent ask you a question (choice / yes-no / text) mid-turn" },
   { name: "Renderers", source: "/opt/piwork-suite/piwork-renderers", dir: "piwork-renderers", desc: "Extra file renderers for the viewer (CSV/TSV → table) — richer than the built-in text view" },
@@ -78,6 +77,14 @@ export default function App() {
   // file is context-specific, so clear it when the session context changes.
   useEffect(() => { setOpenFile(null); }, [inSession]);
 
+  // The agent presented a workspace file via show_artifact → open it in the viewer, host-side.
+  useEffect(() => {
+    const req = b.fileOpenRequest;
+    if (!req || !b.activeFolder) return;
+    openFileAt(`${b.activeFolder.replace(/\/+$/, "")}/${req.rel.replace(/^\/+/, "")}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [b.fileOpenRequest?.nonce]);
+
   // Prevent a file dropped ANYWHERE outside the composer from navigating the window to it
   // (Chromium's default). The composer's own onDrop still handles attachments in its region.
   useEffect(() => {
@@ -110,7 +117,6 @@ export default function App() {
     ...(b.globalMode || !filesRoot ? [] : [{ key: "files", iconUrl: fileIcon, label: "Files", title: "Browse workspace files", active: filesOpen, onClick: () => setFilesOpen((v) => !v) } as RailItem]),
     { key: "skills", iconUrl: extensionsIcon, label: "Skills", title: "Manage skills, plugins & extensions", onClick: () => (b.globalMode ? r.openFor("global") : b.activeFolder && r.openFor("project", b.activeFolder)) },
     { key: "connect", iconUrl: connectorsIcon, label: "Connect", title: "Manage MCP connectors (Slack, Notion, …)", onClick: () => (b.globalMode ? c.openFor("global") : b.activeFolder && c.openFor("project", b.activeFolder)) },
-    { key: "docs", iconUrl: docsIcon, label: "Docs", title: "Artifacts & document viewer", badge: artifactCount, active: b.artifactsOpen && artifactCount > 0, onClick: () => b.setArtifactsOpen((v: boolean) => !v) },
     { key: "rewind", iconUrl: rewindIcon, label: "Rewind", disabled: b.streaming, active: b.treeOpen, title: b.streaming ? "Rewind is available when the agent is idle" : "Rewind — jump back to an earlier point", onClick: b.openSessionTree },
   ];
   const homeTools: RailItem[] = [

@@ -40,6 +40,8 @@ export function useBridge() {
   // of silently bouncing to home. intentionalEnd distinguishes a user-triggered End.
   const [dropped, setDropped] = useState(false);
   const intentionalEnd = useRef(false);
+  // Set when the agent presents a workspace file via show_artifact; App opens it in the viewer.
+  const [fileOpenRequest, setFileOpenRequest] = useState<{ rel: string; nonce: number } | null>(null);
   const [treeOpen, setTreeOpen] = useState(false);
   const [rewinding, setRewinding] = useState(false);
   const [injectedText, setInjectedText] = useState<{ text: string; nonce: number } | null>(null);
@@ -290,6 +292,12 @@ export function useBridge() {
           break;
         case "artifact": {
           const key = String(p.key ?? "default");
+          if (typeof p.file === "string" && p.file) {
+            // Present a workspace file: let the shell open it host-side in the viewer (same
+            // pipeline as the Files panel). A nonce so re-presenting the same file re-triggers.
+            setFileOpenRequest((prev) => ({ rel: String(p.file), nonce: (prev?.nonce ?? 0) + 1 }));
+            break;
+          }
           const empty = p.clear || (p.html == null && p.markdown == null);
           setArtifacts((prev) => {
             const next = { ...prev };
@@ -511,6 +519,7 @@ export function useBridge() {
     sessionTree, treeOpen, setTreeOpen, openSessionTree, rewindTo, rewinding, injectedText,
     mcpStatus, setMcpStatus,
     dropped, reconnect,
+    fileOpenRequest,
     submit, abort, respondDialog, setModel,
     startLogin, chooseProvider, submitLoginInput, closeLogin,
     refreshRecent, pickFolder, selectFolder, backToFolders, startWith, endToHome, endToSessions,

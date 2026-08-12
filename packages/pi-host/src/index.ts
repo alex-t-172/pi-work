@@ -529,12 +529,15 @@ async function main() {
     ...ui,
     openExternal: (url: string) => emitUiIntent("openExternal", { url: String(url) }),
     // Render rich HTML/markdown in a sandboxed panel (the "artifact" escape hatch).
-    showArtifact: (opts: { key?: string; title?: string; html?: string; markdown?: string }) =>
+    showArtifact: (opts: { key?: string; title?: string; html?: string; markdown?: string; file?: string }) =>
       emitUiIntent("artifact", {
         key: String(opts?.key ?? "default"),
         title: opts?.title != null ? String(opts.title) : undefined,
         html: opts?.html != null ? String(opts.html) : undefined,
         markdown: opts?.markdown != null ? String(opts.markdown) : undefined,
+        // A workspace file to present: the shell opens it host-side in the viewer (same
+        // pipeline as the Files panel — renderers, images), so an artifact is just a file.
+        file: opts?.file != null ? String(opts.file) : undefined,
       }),
     clearArtifact: (key?: string) => emitUiIntent("artifact", { key: String(key ?? "default"), clear: true }),
     // Session-tree graph for the visual navigator.
