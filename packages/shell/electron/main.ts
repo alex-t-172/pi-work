@@ -344,40 +344,84 @@ ipcMain.handle("piwork:setConfig", (_e, patch: Record<string, unknown>) => setCo
 // so its ModelRegistry re-reads it. Lets you use a model the pinned Pi SDK doesn't list yet
 // (e.g. a just-released Opus) without waiting for an SDK bump: it merges into the built-in
 // provider by id and reuses that provider's existing OAuth / API-key auth.
-function mergeModel(json: Record<string, any>, provider: string, model: Record<string, unknown>): void {
+// Read/write the agent store's models.json (host dir directly; a docker volume via a throwaway
+// container, since main can't fs-touch a volume). Mutation logic stays shared in main.
+function readModelsJson(mount: { agentHostDir?: string; agentVolume?: string }): Record<string, any> {
+  if (mount.agentHostDir) {
+    try { return JSON.parse(fs.readFileSync(path.join(mount.agentHostDir, "models.json"), "utf8")); } catch { return {}; }
+  }
+  const r = spawnSync(DOCKER, ["run", "--rm", "-v", `${mount.agentVolume}:/a`, "--entrypoint", "sh", IMAGE, "-c", "cat /a/models.json 2>/dev/null || echo {}"], { encoding: "utf8" });
+  try { return JSON.parse(r.stdout || "{}"); } catch { return {}; }
+}
+function writeModelsJson(mount: { agentHostDir?: string; agentVolume?: string }, json: Record<string, any>): { ok: boolean; error?: string } {
+  const data = JSON.stringify(json, null, 2);
+  if (mount.agentHostDir) {
+    fs.mkdirSync(mount.agentHostDir, { recursive: true });
+    fs.writeFileSync(path.join(mount.agentHostDir, "models.json"), data);
+    return { ok: true };
+  }
+  const r = spawnSync(DOCKER, ["run", "--rm", "-v", `${mount.agentVolume}:/a`, "--entrypoint", "node", IMAGE, "-e", "require('fs').writeFileSync('/a/models.json',process.env.PW)"], { encoding: "utf8", env: { ...process.env, PW: data } });
+  return r.status === 0 ? { ok: true } : { ok: false, error: `write failed: ${r.stderr || r.status}` };
+}
+function providerOf(json: Record<string, any>, provider: string): Record<string, any> {
   json.providers = json.providers && typeof json.providers === "object" ? json.providers : {};
   const p = json.providers[provider] && typeof json.providers[provider] === "object" ? json.providers[provider] : (json.providers[provider] = {});
   p.models = Array.isArray(p.models) ? p.models : [];
+  return p;
+}
+function upsertModel(p: Record<string, any>, model: Record<string, unknown>): void {
   const i = p.models.findIndex((x: any) => x && x.id === (model as { id: string }).id);
   if (i >= 0) p.models[i] = model; else p.models.push(model);
 }
+
+// Add a model to an existing/built-in provider (reuses its auth). Restart so the registry re-reads.
 ipcMain.handle("piwork:addModel", async (_e, m: { provider?: string; id?: string; name?: string }) => {
   try {
     const provider = String(m?.provider ?? "").trim();
     const id = String(m?.id ?? "").trim();
     if (!provider || !id) return { ok: false, error: "provider and model id are required" };
     const model: Record<string, unknown> = {
-      id,
-      ...(m?.name?.trim() ? { name: m.name.trim() } : {}),
+      id, ...(m?.name?.trim() ? { name: m.name.trim() } : {}),
       reasoning: true, input: ["text", "image"], contextWindow: 200000, maxTokens: 64000,
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, // display only; unknown for a custom model
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     };
     const mount = agentMount();
-    if (mount.agentHostDir) {
-      const p = path.join(mount.agentHostDir, "models.json");
-      let json: Record<string, any> = {};
-      try { json = JSON.parse(fs.readFileSync(p, "utf8")); } catch { /* new file */ }
-      mergeModel(json, provider, model);
-      fs.mkdirSync(mount.agentHostDir, { recursive: true });
-      fs.writeFileSync(p, JSON.stringify(json, null, 2));
-    } else {
-      // Prod volume: main can't fs-touch a docker volume, so merge via a throwaway container.
-      const script = "const fs=require('fs');const P='/root/.pi/agent/models.json';let j={};try{j=JSON.parse(fs.readFileSync(P,'utf8'))}catch{};const {provider,model}=JSON.parse(process.env.PW);j.providers=(j.providers&&typeof j.providers==='object')?j.providers:{};const p=(j.providers[provider]&&typeof j.providers[provider]==='object')?j.providers[provider]:(j.providers[provider]={});p.models=Array.isArray(p.models)?p.models:[];const i=p.models.findIndex(x=>x&&x.id===model.id);i>=0?(p.models[i]=model):p.models.push(model);fs.writeFileSync(P,JSON.stringify(j,null,2));";
-      const r = spawnSync(DOCKER, ["run", "--rm", "--entrypoint", "node", "-e", `PW=${JSON.stringify({ provider, model })}`, IMAGE, "-e", script], { encoding: "utf8" });
-      if (r.status !== 0) return { ok: false, error: `write failed: ${r.stderr || r.status}` };
-    }
+    const json = readModelsJson(mount);
+    upsertModel(providerOf(json, provider), model);
+    const w = writeModelsJson(mount, json);
+    if (!w.ok) return w;
     log(`addModel: ${provider}/${id} → models.json`);
-    // Re-read models.json: restart the live session so the ModelRegistry picks up the new model.
+    if (bridge && lastAgent) await startSessionFor(lastAgent.workspace, "recent");
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+});
+
+// Add a CUSTOM provider (e.g. Mistral: api-key based, not a built-in OAuth login) — writes its
+// baseUrl/api/apiKey + a starter model into models.json. The agent-store models.json is host-side
+// (not in-repo), so a literal apiKey there is the user's local credential store, like auth.json.
+ipcMain.handle("piwork:addProvider", async (_e, p: { provider?: string; api?: string; baseUrl?: string; apiKey?: string; modelId?: string; modelName?: string; reasoning?: boolean }) => {
+  try {
+    const provider = String(p?.provider ?? "").trim();
+    const api = String(p?.api ?? "").trim();
+    const apiKey = String(p?.apiKey ?? "").trim();
+    const modelId = String(p?.modelId ?? "").trim();
+    if (!provider || !api || !apiKey || !modelId) return { ok: false, error: "provider, api, API key and a model id are required" };
+    const mount = agentMount();
+    const json = readModelsJson(mount);
+    const prov = providerOf(json, provider);
+    if (p?.baseUrl?.trim()) prov.baseUrl = p.baseUrl.trim();
+    prov.api = api;
+    prov.apiKey = apiKey;
+    upsertModel(prov, {
+      id: modelId, ...(p?.modelName?.trim() ? { name: p.modelName.trim() } : {}),
+      reasoning: p?.reasoning ?? false, input: ["text"], contextWindow: 128000, maxTokens: 8192,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    });
+    const w = writeModelsJson(mount, json);
+    if (!w.ok) return w;
+    log(`addProvider: ${provider} (${api}) → models.json`);
     if (bridge && lastAgent) await startSessionFor(lastAgent.workspace, "recent");
     return { ok: true };
   } catch (err) {

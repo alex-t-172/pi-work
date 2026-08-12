@@ -40,6 +40,8 @@ export interface PiworkApi {
   loginInput(id: string, value: string): void;
   /** Add/update a custom model in models.json (merges into a provider, reuses its auth), then reload. */
   addModel(model: { provider: string; id: string; name?: string }): Promise<{ ok: boolean; error?: string }>;
+  /** Add a custom API-key provider (baseUrl/api/apiKey + a starter model) to models.json, then reload. */
+  addProvider(p: { provider: string; api: string; baseUrl?: string; apiKey: string; modelId: string; modelName?: string; reasoning?: boolean }): Promise<{ ok: boolean; error?: string }>;
   /** Copy files into the workspace's .attachments/ (git-excluded); returns their workspace paths. */
   attachFiles(workspace: string, sources: string[]): Promise<{ ok: boolean; error?: string; files: Array<{ name: string; relPath: string }> }>;
   /** Open a multi-select file picker; returns chosen source paths (or []). */

@@ -165,7 +165,9 @@ export default function App() {
         </div>
       ) : (
         <div className="app-row">
-          <ActivityRail tools={homeTools} settings={settingsRail} />
+          {/* Home has no session, so Model (list needs a session; OAuth login needs a workspace)
+              is dropped here — it lives in-session. Theme/Debug stay. */}
+          <ActivityRail tools={homeTools} settings={settingsRail.filter((s) => s.key !== "model")} />
           {filesOpen && (
             <FilesPanel
               initialDir={b.launcherFolder ?? ""}
@@ -1402,6 +1404,51 @@ function AddModel(props: { defaultProvider: string }) {
   );
 }
 
+// Add a custom API-key provider (e.g. Mistral) — not a built-in OAuth login. Writes a provider
+// entry (baseUrl/api/apiKey + a starter model) to models.json and reloads.
+const PROVIDER_APIS = ["mistral-conversations", "openai-completions", "anthropic-messages", "google-generative-ai"];
+function AddProvider() {
+  const [open, setOpen] = useState(false);
+  const [provider, setProvider] = useState("");
+  const [api, setApi] = useState("openai-completions");
+  const [baseUrl, setBaseUrl] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [modelId, setModelId] = useState("");
+  const [modelName, setModelName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const fillMistral = () => { setProvider("mistral"); setApi("mistral-conversations"); setBaseUrl("https://api.mistral.ai"); setModelId("mistral-large-latest"); setModelName("Mistral Large"); };
+  const valid = provider.trim() && apiKey.trim() && modelId.trim();
+  const submit = async () => {
+    if (!valid) return;
+    setBusy(true); setErr(null);
+    const r = await window.piwork.addProvider({ provider: provider.trim(), api, baseUrl: baseUrl.trim() || undefined, apiKey: apiKey.trim(), modelId: modelId.trim(), modelName: modelName.trim() || undefined, reasoning: false });
+    setBusy(false);
+    if (r.ok) { setOpen(false); setApiKey(""); } else setErr(r.error ?? "couldn't add provider");
+  };
+  if (!open) return <button className="link add-model-open" onClick={() => setOpen(true)}>+ Add a provider by API key (e.g. Mistral)</button>;
+  return (
+    <div className="add-model">
+      <div className="muted">Add an API-key provider. <button className="link" onClick={fillMistral}>Fill Mistral defaults</button>, paste your key, Add. (Verify base URL / model against the provider's docs.)</div>
+      <div className="kv-row">
+        <input placeholder="provider id (e.g. mistral)" value={provider} onChange={(e) => setProvider(e.target.value)} />
+        <select className="model-picker" value={api} onChange={(e) => setApi(e.target.value)}>{PROVIDER_APIS.map((a) => <option key={a} value={a}>{a}</option>)}</select>
+      </div>
+      <input placeholder="base URL (e.g. https://api.mistral.ai)" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
+      <input type="password" placeholder="API key" value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
+      <div className="kv-row">
+        <input placeholder="model id (e.g. mistral-large-latest)" value={modelId} onChange={(e) => setModelId(e.target.value)} />
+        <input placeholder="display name (optional)" value={modelName} onChange={(e) => setModelName(e.target.value)} />
+      </div>
+      {err && <div className="res-error">{err}</div>}
+      <div className="modal-actions">
+        <button className="primary" disabled={!valid || busy} onClick={submit}>{busy ? "Adding…" : "Add provider"}</button>
+        <button className="secondary" onClick={() => setOpen(false)}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
 function ModelAccountModal(props: {
   models: { provider: string; id: string }[];
   currentModel: { provider: string; id: string } | null;
@@ -1447,6 +1494,7 @@ function ModelAccountModal(props: {
           )}
 
           <AddModel defaultProvider={cur?.provider ?? props.connected[0] ?? "anthropic"} />
+          <AddProvider />
 
           <div className="theme-section">Providers</div>
           <div className="options">
@@ -1461,7 +1509,10 @@ function ModelAccountModal(props: {
           </div>
         </>
       ) : (
-        <div className="modal-message">No model provider connected yet. Connect one to start using models.</div>
+        <>
+          <div className="modal-message">No model provider connected yet. Connect one above, or add an API-key provider:</div>
+          <AddProvider />
+        </>
       )}
       {props.hello && <div className="muted" style={{ marginTop: 14 }}>pi {props.hello.piVersion}</div>}
     </ModalShell>
