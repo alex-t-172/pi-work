@@ -27,6 +27,7 @@ export function useBridge() {
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [currentModel, setCurrentModel] = useState<ModelInfo | null>(null);
   const [thinkingLevel, setThinkingLevelState] = useState<string>("medium");
+  const [systemPrompt, setSystemPrompt] = useState<string | null>(null); // composed prompt (fetched on demand)
   const [stderrLog, setStderrLog] = useState<string[]>([]);
   const [debugLog, setDebugLog] = useState<string[]>([]);
   const [login, setLogin] = useState<LoginState>({ active: false });
@@ -274,6 +275,9 @@ export function useBridge() {
         case "mcpStatus":
           setMcpStatus((Array.isArray(p.servers) ? p.servers : []) as McpStatusEntry[]);
           break;
+        case "systemPrompt":
+          setSystemPrompt(String(p.prompt ?? ""));
+          break;
         case "sessionTree":
           setSessionTree({ tree: (p.tree as TreeNode[]) ?? [], leaf: (p.leaf as string | null) ?? null });
           setTreeOpen(true);
@@ -468,6 +472,8 @@ export function useBridge() {
   );
 
   const openSessionTree = useCallback(() => window.piwork.send({ id: "tree", type: "prompt", message: "/piwork-tree" }), []);
+  // Ask pi-host for the composed system prompt (arrives via the "systemPrompt" intent).
+  const fetchSystemPrompt = useCallback(() => window.piwork.send({ id: "sysprompt", type: "prompt", message: "/piwork-system-prompt" }), []);
   const rewindTo = useCallback((id: string, prefill?: string) => {
     if (streamingRef.current) return; // no rewinding mid-turn (UI is disabled too)
     rewindInFlight.current = true;
@@ -526,6 +532,7 @@ export function useBridge() {
     recentFolders, launcherFolder, launcherSessions, activeFolder, globalMode, startGlobal,
     artifacts, artifactsOpen, setArtifactsOpen, lastArtifactKey, commands,
     sessionTree, treeOpen, setTreeOpen, openSessionTree, rewindTo, rewinding, injectedText,
+    systemPrompt, fetchSystemPrompt,
     mcpStatus, setMcpStatus,
     dropped, reconnect,
     fileOpenRequest,

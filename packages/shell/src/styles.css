@@ -337,3 +337,6 @@ button.primary:hover { filter: brightness(1.08); }
 .instr-kinds { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 8px; }
 .instr-editor { width: 100%; min-height: 300px; resize: vertical; background: var(--bg2); color: var(--fg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-family: var(--font-family); font-size: 13px; line-height: 1.5; margin: 10px 0; }
 .instr-editor:focus { outline: none; border-color: var(--accent); }
+
+/* Read-only view of the composed system prompt */
+.sysprompt-view { max-height: 320px; overflow: auto; background: var(--code); color: var(--fg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 12px; line-height: 1.5; white-space: pre-wrap; margin-top: 8px; }

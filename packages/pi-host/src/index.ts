@@ -212,6 +212,17 @@ const piworkBaseExtension = (pi: {
     },
   });
 
+  // Emit the current composed system prompt so the shell can show it (read-only) — lets the
+  // user see what they're editing before appending to / replacing it.
+  pi.registerCommand("piwork-system-prompt", {
+    description: "Show the agent's current system prompt in Piwork",
+    handler: async (_args, ctx) => {
+      const c = ctx as { getSystemPrompt?: () => string; ui: { showSystemPrompt?: (d: { prompt: string }) => void } };
+      const prompt = typeof c.getSystemPrompt === "function" ? c.getSystemPrompt() : "";
+      c.ui.showSystemPrompt?.({ prompt: String(prompt ?? "") });
+    },
+  });
+
   const emitTree = (ctx: any) => {
     const tree = ctx.sessionManager.getTree().map(trimTreeNode);
     ctx.ui.showSessionTree({ tree, leaf: ctx.sessionManager.getLeafId() });
@@ -544,6 +555,8 @@ async function main() {
     showSessionTree: (data: { tree: unknown; leaf: string | null }) => emitUiIntent("sessionTree", { tree: data.tree, leaf: data.leaf }),
     // MCP connector auth status for the Connectors UI.
     showMcpStatus: (data: { servers: unknown }) => emitUiIntent("mcpStatus", { servers: data.servers }),
+    // The composed system prompt (so the user can see what they're editing/replacing).
+    showSystemPrompt: (data: { prompt: string }) => emitUiIntent("systemPrompt", { prompt: String(data?.prompt ?? "") }),
   });
   // Patch bindExtensions on the AgentSession PROTOTYPE so it also covers sessions created
   // by replacement (new/fork/switch), which runRpcMode rebinds automatically.

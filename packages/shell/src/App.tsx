@@ -45,7 +45,6 @@ export default function App() {
   const [showDebug, setShowDebug] = useState(false);
   const [showTheme, setShowTheme] = useState(false);
   const [showModelAccount, setShowModelAccount] = useState(false);
-  const [showInstructions, setShowInstructions] = useState(false);
   const [artWidth, setArtWidth] = useState(520);
   const [filesOpen, setFilesOpen] = useState(false); // one shared drawer state across home/folder/session
   const [openFile, setOpenFile] = useState<FileContent | null>(null);
@@ -116,15 +115,13 @@ export default function App() {
   const sessionTools: RailItem[] = [
     // Files: only a real workspace has files (the folderless global chat has none).
     ...(b.globalMode || !filesRoot ? [] : [{ key: "files", iconUrl: fileIcon, label: "Files", title: "Browse workspace files", active: filesOpen, onClick: () => setFilesOpen((v) => !v) } as RailItem]),
-    { key: "skills", iconUrl: extensionsIcon, label: "Skills", title: "Skills & extensions", onClick: () => (b.globalMode ? r.openFor("global") : b.activeFolder && r.openFor("project", b.activeFolder)) },
-    { key: "instructions", iconNode: InstructionsIcon, label: "Instructions", title: "Agent instructions & system prompt", onClick: () => setShowInstructions(true) },
+    { key: "skills", iconUrl: extensionsIcon, label: "Skills", title: "Skills, extensions & instructions", onClick: () => (b.globalMode ? r.openFor("global") : b.activeFolder && r.openFor("project", b.activeFolder)) },
     { key: "connect", iconUrl: connectorsIcon, label: "Connect", title: "Manage MCP connectors (Slack, Notion, …)", onClick: () => (b.globalMode ? c.openFor("global") : b.activeFolder && c.openFor("project", b.activeFolder)) },
     { key: "rewind", iconUrl: rewindIcon, label: "Rewind", disabled: b.streaming, active: b.treeOpen, title: b.streaming ? "Rewind is available when the agent is idle" : "Jump back to an earlier point", onClick: b.openSessionTree },
   ];
   const homeTools: RailItem[] = [
     { key: "files", iconUrl: fileIcon, label: "Files", title: "Browse folders", active: filesOpen, onClick: () => setFilesOpen((v) => !v) },
-    { key: "skills", iconUrl: extensionsIcon, label: "Skills", title: "Skills & extensions", onClick: () => r.openFor("global") },
-    { key: "instructions", iconNode: InstructionsIcon, label: "Instructions", title: "Agent instructions & system prompt", onClick: () => setShowInstructions(true) },
+    { key: "skills", iconUrl: extensionsIcon, label: "Skills", title: "Skills, extensions & instructions", onClick: () => r.openFor("global") },
     { key: "connect", iconUrl: connectorsIcon, label: "Connect", title: "MCP connectors (Slack, Notion, …)", onClick: () => c.openFor("global") },
   ];
   return (
@@ -212,12 +209,6 @@ export default function App() {
       )}
       <Toasts toasts={b.toasts} />
       {showTheme && <ThemeModal t={t} onClose={() => setShowTheme(false)} />}
-      {showInstructions && (
-        <InstructionsModal
-          projectFolder={b.globalMode ? undefined : (b.activeFolder ?? b.launcherFolder ?? undefined)}
-          onClose={() => setShowInstructions(false)}
-        />
-      )}
       {showModelAccount && (
         <ModelAccountModal
           models={b.models}
@@ -231,7 +222,7 @@ export default function App() {
           onClose={() => setShowModelAccount(false)}
         />
       )}
-      {r.open && <ResourcesModal r={r} inSession={inSession} projectFolder={(inSession ? b.activeFolder : b.launcherFolder) ?? undefined} onClose={r.close} />}
+      {r.open && <ResourcesModal r={r} inSession={inSession} projectFolder={(inSession ? b.activeFolder : b.launcherFolder) ?? undefined} systemPrompt={b.systemPrompt} onFetchSystemPrompt={b.fetchSystemPrompt} onClose={r.close} />}
       {c.open && <ConnectorsModal c={c} inSession={inSession} projectFolder={(inSession ? b.activeFolder : b.launcherFolder) ?? undefined} status={b.mcpStatus} onClose={c.close} />}
       {b.dialog && <DialogModal dialog={b.dialog} onRespond={b.respondDialog} />}
       {inSession && b.treeOpen && b.sessionTree && (
@@ -663,13 +654,6 @@ function DebugDrawer(props: { debugLog: string[]; stderrLog: string[]; onClose: 
 // screen and an in-session view each compose their own set; also the intended dock for the
 // Files panel and extension setWidget panels.
 type RailItem = { key: string; iconUrl?: string; iconNode?: React.ReactNode; label: string; onClick: () => void; active?: boolean; disabled?: boolean; title?: string; badge?: number };
-
-// Line-SVG for the Instructions rail item (no supplied artwork). currentColor.
-const InstructionsIcon = (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M5 3h10l4 4v14H5z" /><path d="M15 3v4h4M8 12h8M8 16h6M8 8h3" />
-  </svg>
-);
 // Left activity rail, variant C: three visually-zoned groups top→bottom —
 //   1. Tools (files/skills/connect/docs/rewind),
 //   2. a divider, then Settings (model/account, theme, debug),
@@ -1126,7 +1110,7 @@ function ScopeBadge({ scope }: { scope?: string }) {
   return <span className={`scope-badge scope-${scope}`}>{label}</span>;
 }
 
-function ResourcesModal(props: { r: ReturnType<typeof useResources>; inSession: boolean; projectFolder?: string; onClose: () => void }) {
+function ResourcesModal(props: { r: ReturnType<typeof useResources>; inSession: boolean; projectFolder?: string; systemPrompt: string | null; onFetchSystemPrompt: () => void; onClose: () => void }) {
   const { r } = props;
   const isGlobal = r.mode === "global";
   const managedScope = isGlobal ? "user" : "project";
@@ -1143,7 +1127,7 @@ function ResourcesModal(props: { r: ReturnType<typeof useResources>; inSession: 
   return (
     <ModalShell
       className="resources-modal"
-      title="Extensions & skills"
+      title="Extensions, skills & instructions"
       subtitle={isGlobal ? "Global — available in every project" : `${basename(r.workspace)} — this project only`}
       headerExtra={r.dirty && props.inSession ? <button className="primary" onClick={r.reload}>Reload to apply</button> : undefined}
       onClose={props.onClose}
@@ -1151,6 +1135,11 @@ function ResourcesModal(props: { r: ReturnType<typeof useResources>; inSession: 
         <ScopeSwitch scope={r.mode} projectFolder={props.projectFolder} onGlobal={() => r.openFor("global")} onProject={(f) => r.openFor("project", f)} />
         {r.error && <div className="res-error">{r.error}</div>}
         {r.busy && <Loading label={r.busy} />}
+
+        <div className="theme-section">Instructions</div>
+        <InstructionsSection scope={r.mode} folder={props.projectFolder} />
+        <div className="theme-section">Current system prompt</div>
+        <SystemPromptView prompt={props.systemPrompt} onFetch={props.onFetchSystemPrompt} canFetch={props.inSession} />
 
         <div className="theme-section">Add a preset</div>
         <div className="preset-list">
@@ -1562,14 +1551,15 @@ const INSTR_KINDS = [
   { key: "append", label: "Append to prompt", hint: "Added to the end of Pi's system prompt (APPEND_SYSTEM.md)." },
   { key: "replace", label: "Replace prompt", hint: "Replaces the whole base system prompt — advanced (SYSTEM.md)." },
 ];
-function InstructionsModal(props: { projectFolder?: string; onClose: () => void }) {
-  const [scope, setScope] = useState<"global" | "project">(props.projectFolder ? "project" : "global");
+// Instructions editor — a SECTION inside the Skills/extensions modal (it's all agent-shaping).
+// scope + folder come from the modal's own scope switch.
+function InstructionsSection(props: { scope: "global" | "project"; folder?: string }) {
   const [kind, setKind] = useState("agents");
   const [content, setContent] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
-  const folder = props.projectFolder;
+  const { scope, folder } = props;
   useEffect(() => {
     setLoaded(false); setSaved(false);
     window.piwork.readInstructions(scope, folder, kind).then((res) => { setContent(res.content ?? ""); setLoaded(true); });
@@ -1582,8 +1572,7 @@ function InstructionsModal(props: { projectFolder?: string; onClose: () => void 
   };
   const active = INSTR_KINDS.find((k) => k.key === kind) ?? INSTR_KINDS[0];
   return (
-    <ModalShell title="Instructions" subtitle="Shape the agent — the same files it can edit itself" className="instructions-modal" onClose={props.onClose}>
-      <ScopeSwitch scope={scope} projectFolder={folder} onGlobal={() => setScope("global")} onProject={() => setScope("project")} />
+    <>
       <div className="instr-kinds">
         {INSTR_KINDS.map((k) => (
           <button key={k.key} className={`thinking-lv${kind === k.key ? " active" : ""}`} onClick={() => setKind(k.key)}>{k.label}</button>
@@ -1600,7 +1589,20 @@ function InstructionsModal(props: { projectFolder?: string; onClose: () => void 
       <div className="modal-actions">
         <button className="primary" disabled={busy || !loaded} onClick={save}>{busy ? "Saving…" : saved ? "Saved ✓" : "Save"}</button>
       </div>
-    </ModalShell>
+    </>
+  );
+}
+
+// Read-only view of the agent's current composed system prompt (so you can decide what to
+// append to / replace). Needs a running session (pi-host computes it).
+function SystemPromptView(props: { prompt: string | null; onFetch: () => void; canFetch: boolean }) {
+  const [open, setOpen] = useState(false);
+  if (!props.canFetch) return <div className="muted">Start a session to view the current system prompt.</div>;
+  return (
+    <>
+      <button className="secondary" onClick={() => { props.onFetch(); setOpen(true); }}>{open ? "↻ Refresh" : "Show current system prompt"}</button>
+      {open && (props.prompt == null ? <div className="muted">Loading…</div> : <pre className="sysprompt-view">{props.prompt}</pre>)}
+    </>
   );
 }
 
