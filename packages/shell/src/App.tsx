@@ -115,13 +115,13 @@ export default function App() {
   const sessionTools: RailItem[] = [
     // Files: only a real workspace has files (the folderless global chat has none).
     ...(b.globalMode || !filesRoot ? [] : [{ key: "files", iconUrl: fileIcon, label: "Files", title: "Browse workspace files", active: filesOpen, onClick: () => setFilesOpen((v) => !v) } as RailItem]),
-    { key: "skills", iconUrl: extensionsIcon, label: "Customise", title: "Customise the agent — instructions, extensions & skills", onClick: () => (b.globalMode ? r.openFor("global") : b.activeFolder && r.openFor("project", b.activeFolder)) },
+    { key: "skills", iconUrl: extensionsIcon, label: "Customise", title: "Customise the agent", onClick: () => (b.globalMode ? r.openFor("global") : b.activeFolder && r.openFor("project", b.activeFolder)) },
     { key: "connect", iconUrl: connectorsIcon, label: "Connect", title: "Manage MCP connectors (Slack, Notion, …)", onClick: () => (b.globalMode ? c.openFor("global") : b.activeFolder && c.openFor("project", b.activeFolder)) },
     { key: "rewind", iconUrl: rewindIcon, label: "Rewind", disabled: b.streaming, active: b.treeOpen, title: b.streaming ? "Rewind is available when the agent is idle" : "Jump back to an earlier point", onClick: b.openSessionTree },
   ];
   const homeTools: RailItem[] = [
     { key: "files", iconUrl: fileIcon, label: "Files", title: "Browse folders", active: filesOpen, onClick: () => setFilesOpen((v) => !v) },
-    { key: "skills", iconUrl: extensionsIcon, label: "Customise", title: "Customise the agent — instructions, extensions & skills", onClick: () => r.openFor("global") },
+    { key: "skills", iconUrl: extensionsIcon, label: "Customise", title: "Customise the agent", onClick: () => r.openFor("global") },
     { key: "connect", iconUrl: connectorsIcon, label: "Connect", title: "MCP connectors (Slack, Notion, …)", onClick: () => c.openFor("global") },
   ];
   return (
@@ -1199,13 +1199,13 @@ function ResourcesModal(props: { r: ReturnType<typeof useResources>; inSession: 
 
             {loading
               ? <Loading label="Loading…" />
-              : <ResourceGroup title="Active" items={[...managed(d.extensions), ...inherited(d.extensions)]} render={(e) => e.commands?.length ? `commands: ${e.commands.join(", ")}` : ""} scoped />}
+              : <ResourceGroup title="Active extensions" items={[...managed(d.extensions), ...inherited(d.extensions)]} render={(e) => e.commands?.length ? `commands: ${e.commands.join(", ")}` : ""} scoped />}
           </>
         )}
 
         {tab === "skills" && (
           <>
-            <div className="callout">Add skills with a skill manager (e.g. <b>Tessl</b> or <b>skills.sh</b>) — ask the agent to install them for this project or globally in a session.</div>
+            <div className="callout">To add skills, ask the agent to install them with a skill manager like <b>Tessl</b> or <b>skills.sh</b>.</div>
             {loading ? (
               <Loading label="Loading…" />
             ) : (
@@ -1217,7 +1217,7 @@ function ResourcesModal(props: { r: ReturnType<typeof useResources>; inSession: 
             <div className="theme-section">Global skills folder</div>
             <label className="tune-row">
               <input type="checkbox" checked={!!r.config.shareAgentsDir} onChange={(e) => r.setShareAgents(e.target.checked)} />
-              <span>Use my <code>~/.agents</code> skills (shared with other CLI agents)</span>
+              <span>Use my <code>~/.agents</code> skills</span>
             </label>
           </>
         )}
@@ -1457,7 +1457,7 @@ function AddProvider() {
   if (!open) return <button className="link add-model-open" onClick={() => setOpen(true)}>+ Add a provider by API key (e.g. Mistral)</button>;
   return (
     <div className="add-model">
-      <div className="muted">Add an API-key provider. <button className="link" onClick={fillMistral}>Fill Mistral defaults</button>, paste your key, Add. (Verify base URL / model against the provider's docs.)</div>
+      <div className="muted">Add an API-key provider. Try <button className="link" onClick={fillMistral}>Fill Mistral defaults</button>, then paste your key.</div>
       <div className="kv-row">
         <input placeholder="provider id (e.g. mistral)" value={provider} onChange={(e) => setProvider(e.target.value)} />
         <select className="model-picker" value={api} onChange={(e) => setApi(e.target.value)}>{PROVIDER_APIS.map((a) => <option key={a} value={a}>{a}</option>)}</select>
@@ -1565,9 +1565,9 @@ function ModelAccountModal(props: {
 // Edit the agent's instructions / system prompt — the same files the agent can edit itself,
 // with a nice editor. agents = AGENTS.md, append = APPEND_SYSTEM.md, replace = SYSTEM.md.
 const INSTR_KINDS = [
-  { key: "agents", label: "Instructions", hint: "Standing instructions & conventions for the agent (AGENTS.md). The common one." },
-  { key: "append", label: "Append to prompt", hint: "Added to the end of Pi's system prompt (APPEND_SYSTEM.md)." },
-  { key: "replace", label: "Replace prompt", hint: "Replaces the whole base system prompt — advanced (SYSTEM.md)." },
+  { key: "agents", label: "Instructions", hint: "Instructions and conventions for the agent (AGENTS.md)." },
+  { key: "append", label: "Append to prompt", hint: "Appended to the system prompt (APPEND_SYSTEM.md)." },
+  { key: "replace", label: "Replace prompt", hint: "Replaces the base system prompt (SYSTEM.md)." },
 ];
 // Instructions editor — a SECTION inside the Skills/extensions modal (it's all agent-shaping).
 // scope + folder come from the modal's own scope switch.
@@ -1601,7 +1601,7 @@ function InstructionsSection(props: { scope: "global" | "project"; folder?: stri
         className="instr-editor"
         value={content}
         disabled={!loaded}
-        placeholder={loaded ? "Nothing set yet — type instructions here." : "Loading…"}
+        placeholder={loaded ? "Type instructions here." : "Loading…"}
         onChange={(e) => { setContent(e.target.value); setSaved(false); }}
       />
       <div className="modal-actions">
