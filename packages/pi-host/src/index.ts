@@ -177,9 +177,25 @@ if (!piworkGlobal.__piwork) {
   piworkGlobal.__piwork = { fileRenderers, registerFileRenderer: (r) => fileRenderers.push(r) };
 }
 
+// Piwork's default system-prompt layer — APPENDED (never replaces) to Pi's base, so we keep
+// Pi's carefully-tuned base + its updates, and user AGENTS.md/append/replace layer on top.
+// Facts only (environment + boundaries); no persona/behaviour tuning. Visible in the prompt viewer.
+const PIWORK_ENV_FOLDER = `You are running inside Piwork, a desktop app that puts pi behind a graphical chat rather than a terminal. A few facts about this environment:
+
+- You work in a sandboxed container. Your working directory /workspace is a folder on the user's own machine that they chose to open, so the files you read and change there are their real files — but you cannot access anything outside /workspace.
+- Files the user attaches in the chat are copied into .attachments/ in the workspace.
+- The user reads your replies in a graphical app, not a terminal, so don't rely on keystroke- or TUI-only instructions.`;
+const PIWORK_ENV_GLOBAL = `You are running inside Piwork, a desktop app for pi. This is a folderless global chat: you have no file access here, but you can help the user set up and customise Piwork itself — its global skills, commands, and tools.`;
+
 const piworkBaseExtension = (pi: {
   registerCommand: (name: string, opts: { description: string; handler: (args: string, ctx: any) => Promise<void> }) => void;
+  on: (event: string, handler: (event: any, ctx: any) => unknown) => void;
 }) => {
+  // Append the Piwork environment layer to every turn's system prompt (chained onto Pi's base;
+  // idempotent — the prompt is rebuilt each turn). Global chat gets the folderless variant.
+  pi.on("before_agent_start", (event) => ({
+    systemPrompt: `${event.systemPrompt}\n\n${process.env.PIWORK_CONFIG_WRITABLE === "1" ? PIWORK_ENV_GLOBAL : PIWORK_ENV_FOLDER}`,
+  }));
   // Render a workspace file through a registered file renderer (→ artifact). Silent no-op
   // when nothing matches: the shell has already shown the base (raw) view.
   pi.registerCommand("piwork-render-file", {
@@ -218,8 +234,11 @@ const piworkBaseExtension = (pi: {
     description: "Show the agent's current system prompt in Piwork",
     handler: async (_args, ctx) => {
       const c = ctx as { getSystemPrompt?: () => string; ui: { showSystemPrompt?: (d: { prompt: string }) => void } };
-      const prompt = typeof c.getSystemPrompt === "function" ? c.getSystemPrompt() : "";
-      c.ui.showSystemPrompt?.({ prompt: String(prompt ?? "") });
+      // getSystemPrompt() outside a turn returns the base (before the before_agent_start layer),
+      // so append the SAME Piwork layer here to show exactly what the model gets each turn.
+      const base = typeof c.getSystemPrompt === "function" ? c.getSystemPrompt() : "";
+      const layer = process.env.PIWORK_CONFIG_WRITABLE === "1" ? PIWORK_ENV_GLOBAL : PIWORK_ENV_FOLDER;
+      c.ui.showSystemPrompt?.({ prompt: `${String(base ?? "")}\n\n${layer}` });
     },
   });
 
