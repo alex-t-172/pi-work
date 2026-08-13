@@ -45,6 +45,7 @@ export default function App() {
   const [showDebug, setShowDebug] = useState(false);
   const [showTheme, setShowTheme] = useState(false);
   const [showModelAccount, setShowModelAccount] = useState(false);
+  const [showInstructions, setShowInstructions] = useState(false);
   const [artWidth, setArtWidth] = useState(520);
   const [filesOpen, setFilesOpen] = useState(false); // one shared drawer state across home/folder/session
   const [openFile, setOpenFile] = useState<FileContent | null>(null);
@@ -116,12 +117,14 @@ export default function App() {
     // Files: only a real workspace has files (the folderless global chat has none).
     ...(b.globalMode || !filesRoot ? [] : [{ key: "files", iconUrl: fileIcon, label: "Files", title: "Browse workspace files", active: filesOpen, onClick: () => setFilesOpen((v) => !v) } as RailItem]),
     { key: "skills", iconUrl: extensionsIcon, label: "Skills", title: "Skills & extensions", onClick: () => (b.globalMode ? r.openFor("global") : b.activeFolder && r.openFor("project", b.activeFolder)) },
+    { key: "instructions", iconNode: InstructionsIcon, label: "Instructions", title: "Agent instructions & system prompt", onClick: () => setShowInstructions(true) },
     { key: "connect", iconUrl: connectorsIcon, label: "Connect", title: "Manage MCP connectors (Slack, Notion, …)", onClick: () => (b.globalMode ? c.openFor("global") : b.activeFolder && c.openFor("project", b.activeFolder)) },
     { key: "rewind", iconUrl: rewindIcon, label: "Rewind", disabled: b.streaming, active: b.treeOpen, title: b.streaming ? "Rewind is available when the agent is idle" : "Jump back to an earlier point", onClick: b.openSessionTree },
   ];
   const homeTools: RailItem[] = [
     { key: "files", iconUrl: fileIcon, label: "Files", title: "Browse folders", active: filesOpen, onClick: () => setFilesOpen((v) => !v) },
     { key: "skills", iconUrl: extensionsIcon, label: "Skills", title: "Skills & extensions", onClick: () => r.openFor("global") },
+    { key: "instructions", iconNode: InstructionsIcon, label: "Instructions", title: "Agent instructions & system prompt", onClick: () => setShowInstructions(true) },
     { key: "connect", iconUrl: connectorsIcon, label: "Connect", title: "MCP connectors (Slack, Notion, …)", onClick: () => c.openFor("global") },
   ];
   return (
@@ -209,11 +212,19 @@ export default function App() {
       )}
       <Toasts toasts={b.toasts} />
       {showTheme && <ThemeModal t={t} onClose={() => setShowTheme(false)} />}
+      {showInstructions && (
+        <InstructionsModal
+          projectFolder={b.globalMode ? undefined : (b.activeFolder ?? b.launcherFolder ?? undefined)}
+          onClose={() => setShowInstructions(false)}
+        />
+      )}
       {showModelAccount && (
         <ModelAccountModal
           models={b.models}
           currentModel={b.currentModel}
           onPickModel={b.setModel}
+          thinkingLevel={b.thinkingLevel}
+          onThinking={b.setThinkingLevel}
           connected={connectedProviders}
           hello={b.hello}
           onConnect={() => { setShowModelAccount(false); b.startLogin(); }}
@@ -652,6 +663,13 @@ function DebugDrawer(props: { debugLog: string[]; stderrLog: string[]; onClose: 
 // screen and an in-session view each compose their own set; also the intended dock for the
 // Files panel and extension setWidget panels.
 type RailItem = { key: string; iconUrl?: string; iconNode?: React.ReactNode; label: string; onClick: () => void; active?: boolean; disabled?: boolean; title?: string; badge?: number };
+
+// Line-SVG for the Instructions rail item (no supplied artwork). currentColor.
+const InstructionsIcon = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M5 3h10l4 4v14H5z" /><path d="M15 3v4h4M8 12h8M8 16h6M8 8h3" />
+  </svg>
+);
 // Left activity rail, variant C: three visually-zoned groups top→bottom —
 //   1. Tools (files/skills/connect/docs/rewind),
 //   2. a divider, then Settings (model/account, theme, debug),
@@ -1376,12 +1394,13 @@ function AddModel(props: { defaultProvider: string }) {
   const [provider, setProvider] = useState(props.defaultProvider);
   const [id, setId] = useState("");
   const [name, setName] = useState("");
+  const [reasoning, setReasoning] = useState(true);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const submit = async () => {
     if (!id.trim()) return;
     setBusy(true); setErr(null);
-    const r = await window.piwork.addModel({ provider: provider.trim(), id: id.trim(), name: name.trim() || undefined });
+    const r = await window.piwork.addModel({ provider: provider.trim(), id: id.trim(), name: name.trim() || undefined, reasoning });
     setBusy(false);
     if (r.ok) { setId(""); setName(""); setOpen(false); } // the reload re-emits the list; the new model appears
     else setErr(r.error ?? "Couldn't add the model.");
@@ -1395,6 +1414,7 @@ function AddModel(props: { defaultProvider: string }) {
         <input placeholder="model id (e.g. claude-opus-5)" value={id} onChange={(e) => setId(e.target.value)} />
       </div>
       <input placeholder="display name (optional)" value={name} onChange={(e) => setName(e.target.value)} />
+      <label className="checkbox-row"><input type="checkbox" checked={reasoning} onChange={(e) => setReasoning(e.target.checked)} /> Supports thinking</label>
       {err && <div className="res-error">{err}</div>}
       <div className="modal-actions">
         <button className="primary" disabled={!id.trim() || busy} onClick={submit}>{busy ? "Adding…" : "Add model"}</button>
@@ -1415,6 +1435,7 @@ function AddProvider() {
   const [apiKey, setApiKey] = useState("");
   const [modelId, setModelId] = useState("");
   const [modelName, setModelName] = useState("");
+  const [reasoning, setReasoning] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const fillMistral = () => { setProvider("mistral"); setApi("mistral-conversations"); setBaseUrl("https://api.mistral.ai"); setModelId("mistral-large-latest"); setModelName("Mistral Large"); };
@@ -1422,7 +1443,7 @@ function AddProvider() {
   const submit = async () => {
     if (!valid) return;
     setBusy(true); setErr(null);
-    const r = await window.piwork.addProvider({ provider: provider.trim(), api, baseUrl: baseUrl.trim() || undefined, apiKey: apiKey.trim(), modelId: modelId.trim(), modelName: modelName.trim() || undefined, reasoning: false });
+    const r = await window.piwork.addProvider({ provider: provider.trim(), api, baseUrl: baseUrl.trim() || undefined, apiKey: apiKey.trim(), modelId: modelId.trim(), modelName: modelName.trim() || undefined, reasoning });
     setBusy(false);
     if (r.ok) { setOpen(false); setApiKey(""); } else setErr(r.error ?? "Couldn't add the provider.");
   };
@@ -1440,6 +1461,7 @@ function AddProvider() {
         <input placeholder="model id (e.g. mistral-large-latest)" value={modelId} onChange={(e) => setModelId(e.target.value)} />
         <input placeholder="display name (optional)" value={modelName} onChange={(e) => setModelName(e.target.value)} />
       </div>
+      <label className="checkbox-row"><input type="checkbox" checked={reasoning} onChange={(e) => setReasoning(e.target.checked)} /> Supports thinking</label>
       {err && <div className="res-error">{err}</div>}
       <div className="modal-actions">
         <button className="primary" disabled={!valid || busy} onClick={submit}>{busy ? "Adding…" : "Add provider"}</button>
@@ -1449,10 +1471,13 @@ function AddProvider() {
   );
 }
 
+const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"];
 function ModelAccountModal(props: {
   models: { provider: string; id: string }[];
-  currentModel: { provider: string; id: string } | null;
+  currentModel: { provider: string; id: string; reasoning?: boolean } | null;
   onPickModel: (provider: string, id: string) => void;
+  thinkingLevel: string;
+  onThinking: (level: string) => void;
   connected: string[];
   hello: { piVersion: string; sessionId?: string } | null;
   onConnect: () => void;
@@ -1493,6 +1518,17 @@ function ModelAccountModal(props: {
             <div className="muted">No models available yet.</div>
           )}
 
+          <div className="theme-section">Thinking</div>
+          {props.currentModel?.reasoning === false ? (
+            <div className="muted">Not supported by {props.currentModel.id}.</div>
+          ) : (
+            <div className="thinking-levels">
+              {THINKING_LEVELS.map((lv) => (
+                <button key={lv} className={`thinking-lv${props.thinkingLevel === lv ? " active" : ""}`} onClick={() => props.onThinking(lv)}>{lv}</button>
+              ))}
+            </div>
+          )}
+
           <AddModel defaultProvider={cur?.provider ?? props.connected[0] ?? "anthropic"} />
           <AddProvider />
 
@@ -1515,6 +1551,55 @@ function ModelAccountModal(props: {
         </>
       )}
       {props.hello && <div className="muted" style={{ marginTop: 14 }}>pi {props.hello.piVersion}</div>}
+    </ModalShell>
+  );
+}
+
+// Edit the agent's instructions / system prompt — the same files the agent can edit itself,
+// with a nice editor. agents = AGENTS.md, append = APPEND_SYSTEM.md, replace = SYSTEM.md.
+const INSTR_KINDS = [
+  { key: "agents", label: "Instructions", hint: "Standing instructions & conventions for the agent (AGENTS.md). The common one." },
+  { key: "append", label: "Append to prompt", hint: "Added to the end of Pi's system prompt (APPEND_SYSTEM.md)." },
+  { key: "replace", label: "Replace prompt", hint: "Replaces the whole base system prompt — advanced (SYSTEM.md)." },
+];
+function InstructionsModal(props: { projectFolder?: string; onClose: () => void }) {
+  const [scope, setScope] = useState<"global" | "project">(props.projectFolder ? "project" : "global");
+  const [kind, setKind] = useState("agents");
+  const [content, setContent] = useState("");
+  const [loaded, setLoaded] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const folder = props.projectFolder;
+  useEffect(() => {
+    setLoaded(false); setSaved(false);
+    window.piwork.readInstructions(scope, folder, kind).then((res) => { setContent(res.content ?? ""); setLoaded(true); });
+  }, [scope, kind, folder]);
+  const save = async () => {
+    setBusy(true);
+    const res = await window.piwork.writeInstructions(scope, folder, kind, content);
+    setBusy(false);
+    if (res.ok) setSaved(true);
+  };
+  const active = INSTR_KINDS.find((k) => k.key === kind) ?? INSTR_KINDS[0];
+  return (
+    <ModalShell title="Instructions" subtitle="Shape the agent — the same files it can edit itself" className="instructions-modal" onClose={props.onClose}>
+      <ScopeSwitch scope={scope} projectFolder={folder} onGlobal={() => setScope("global")} onProject={() => setScope("project")} />
+      <div className="instr-kinds">
+        {INSTR_KINDS.map((k) => (
+          <button key={k.key} className={`thinking-lv${kind === k.key ? " active" : ""}`} onClick={() => setKind(k.key)}>{k.label}</button>
+        ))}
+      </div>
+      <div className="muted">{active.hint}</div>
+      <textarea
+        className="instr-editor"
+        value={content}
+        disabled={!loaded}
+        placeholder={loaded ? "Nothing set yet — type instructions here." : "Loading…"}
+        onChange={(e) => { setContent(e.target.value); setSaved(false); }}
+      />
+      <div className="modal-actions">
+        <button className="primary" disabled={busy || !loaded} onClick={save}>{busy ? "Saving…" : saved ? "Saved ✓" : "Save"}</button>
+      </div>
     </ModalShell>
   );
 }

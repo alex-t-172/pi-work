@@ -344,24 +344,28 @@ ipcMain.handle("piwork:setConfig", (_e, patch: Record<string, unknown>) => setCo
 // so its ModelRegistry re-reads it. Lets you use a model the pinned Pi SDK doesn't list yet
 // (e.g. a just-released Opus) without waiting for an SDK bump: it merges into the built-in
 // provider by id and reuses that provider's existing OAuth / API-key auth.
-// Read/write the agent store's models.json (host dir directly; a docker volume via a throwaway
-// container, since main can't fs-touch a volume). Mutation logic stays shared in main.
-function readModelsJson(mount: { agentHostDir?: string; agentVolume?: string }): Record<string, any> {
-  if (mount.agentHostDir) {
-    try { return JSON.parse(fs.readFileSync(path.join(mount.agentHostDir, "models.json"), "utf8")); } catch { return {}; }
-  }
-  const r = spawnSync(DOCKER, ["run", "--rm", "-v", `${mount.agentVolume}:/a`, "--entrypoint", "sh", IMAGE, "-c", "cat /a/models.json 2>/dev/null || echo {}"], { encoding: "utf8" });
-  try { return JSON.parse(r.stdout || "{}"); } catch { return {}; }
+// Read/write a file in the agent store (host dir directly; a docker volume via a throwaway
+// container, since main can't fs-touch a volume). `name` is a fixed filename from our code
+// (models.json / settings.json / SYSTEM.md / …), never raw user input.
+function readAgentText(mount: { agentHostDir?: string; agentVolume?: string }, name: string): string {
+  if (mount.agentHostDir) { try { return fs.readFileSync(path.join(mount.agentHostDir, name), "utf8"); } catch { return ""; } }
+  const r = spawnSync(DOCKER, ["run", "--rm", "-v", `${mount.agentVolume}:/a`, "--entrypoint", "sh", IMAGE, "-c", `cat /a/${name} 2>/dev/null || true`], { encoding: "utf8" });
+  return r.stdout ?? "";
 }
-function writeModelsJson(mount: { agentHostDir?: string; agentVolume?: string }, json: Record<string, any>): { ok: boolean; error?: string } {
-  const data = JSON.stringify(json, null, 2);
+function writeAgentText(mount: { agentHostDir?: string; agentVolume?: string }, name: string, data: string): { ok: boolean; error?: string } {
   if (mount.agentHostDir) {
     fs.mkdirSync(mount.agentHostDir, { recursive: true });
-    fs.writeFileSync(path.join(mount.agentHostDir, "models.json"), data);
+    fs.writeFileSync(path.join(mount.agentHostDir, name), data);
     return { ok: true };
   }
-  const r = spawnSync(DOCKER, ["run", "--rm", "-v", `${mount.agentVolume}:/a`, "--entrypoint", "node", IMAGE, "-e", "require('fs').writeFileSync('/a/models.json',process.env.PW)"], { encoding: "utf8", env: { ...process.env, PW: data } });
+  const r = spawnSync(DOCKER, ["run", "--rm", "-v", `${mount.agentVolume}:/a`, "--entrypoint", "node", IMAGE, "-e", `require('fs').writeFileSync('/a/${name}',process.env.PW)`], { encoding: "utf8", env: { ...process.env, PW: data } });
   return r.status === 0 ? { ok: true } : { ok: false, error: `write failed: ${r.stderr || r.status}` };
+}
+function readModelsJson(mount: { agentHostDir?: string; agentVolume?: string }): Record<string, any> {
+  try { return JSON.parse(readAgentText(mount, "models.json") || "{}"); } catch { return {}; }
+}
+function writeModelsJson(mount: { agentHostDir?: string; agentVolume?: string }, json: Record<string, any>): { ok: boolean; error?: string } {
+  return writeAgentText(mount, "models.json", JSON.stringify(json, null, 2));
 }
 function providerOf(json: Record<string, any>, provider: string): Record<string, any> {
   json.providers = json.providers && typeof json.providers === "object" ? json.providers : {};
@@ -375,14 +379,14 @@ function upsertModel(p: Record<string, any>, model: Record<string, unknown>): vo
 }
 
 // Add a model to an existing/built-in provider (reuses its auth). Restart so the registry re-reads.
-ipcMain.handle("piwork:addModel", async (_e, m: { provider?: string; id?: string; name?: string }) => {
+ipcMain.handle("piwork:addModel", async (_e, m: { provider?: string; id?: string; name?: string; reasoning?: boolean }) => {
   try {
     const provider = String(m?.provider ?? "").trim();
     const id = String(m?.id ?? "").trim();
     if (!provider || !id) return { ok: false, error: "provider and model id are required" };
     const model: Record<string, unknown> = {
       id, ...(m?.name?.trim() ? { name: m.name.trim() } : {}),
-      reasoning: true, input: ["text", "image"], contextWindow: 200000, maxTokens: 64000,
+      reasoning: m?.reasoning ?? true, input: ["text", "image"], contextWindow: 200000, maxTokens: 64000,
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     };
     const mount = agentMount();
@@ -423,6 +427,70 @@ ipcMain.handle("piwork:addProvider", async (_e, p: { provider?: string; api?: st
     if (!w.ok) return w;
     log(`addProvider: ${provider} (${api}) → models.json`);
     if (bridge && lastAgent) await startSessionFor(lastAgent.workspace, "recent");
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+});
+
+// Persist the default thinking level (settings.json). The LIVE per-session level is set via the
+// set_thinking_level RPC by the renderer; this just makes it stick for future sessions. No reload.
+ipcMain.handle("piwork:setDefaultThinking", async (_e, level: string) => {
+  try {
+    if (!["off", "minimal", "low", "medium", "high", "xhigh"].includes(String(level))) return { ok: false, error: "invalid thinking level" };
+    const mount = agentMount();
+    let json: Record<string, any> = {};
+    try { json = JSON.parse(readAgentText(mount, "settings.json") || "{}"); } catch { /* new file */ }
+    json.defaultThinkingLevel = level;
+    const w = writeAgentText(mount, "settings.json", JSON.stringify(json, null, 2));
+    if (!w.ok) return w;
+    log(`setDefaultThinking: ${level}`);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+});
+
+// ── Instructions / system prompt (Tier 1) ───────────────────────────────────────────
+// The same files the agent itself can edit — Piwork just gives a nice editor.
+//   agents  → AGENTS.md          (standing instructions / conventions; loaded as context)
+//   append  → APPEND_SYSTEM.md   (appended to Pi's base system prompt)
+//   replace → SYSTEM.md          (replaces the base system prompt entirely — advanced)
+// Project scope lives in the workspace; global scope in the agent store.
+const INSTR_FILES: Record<string, { agent: string; project: (folder: string) => string }> = {
+  agents: { agent: "AGENTS.md", project: (f) => path.join(f, "AGENTS.md") },
+  append: { agent: "APPEND_SYSTEM.md", project: (f) => path.join(f, ".pi", "APPEND_SYSTEM.md") },
+  replace: { agent: "SYSTEM.md", project: (f) => path.join(f, ".pi", "SYSTEM.md") },
+};
+ipcMain.handle("piwork:readInstructions", (_e, scope: "global" | "project", folder: string | undefined, kind: string) => {
+  const spec = INSTR_FILES[kind];
+  if (!spec) return { ok: false, content: "", error: "unknown kind" };
+  try {
+    if (scope === "project") {
+      if (!folder) return { ok: false, content: "", error: "no folder" };
+      try { return { ok: true, content: fs.readFileSync(spec.project(folder), "utf8") }; } catch { return { ok: true, content: "" }; }
+    }
+    return { ok: true, content: readAgentText(agentMount(), spec.agent) };
+  } catch (err) {
+    return { ok: false, content: "", error: err instanceof Error ? err.message : String(err) };
+  }
+});
+ipcMain.handle("piwork:writeInstructions", (_e, scope: "global" | "project", folder: string | undefined, kind: string, content: string) => {
+  const spec = INSTR_FILES[kind];
+  if (!spec) return { ok: false, error: "unknown kind" };
+  try {
+    if (scope === "project") {
+      if (!folder) return { ok: false, error: "no folder" };
+      const p = spec.project(folder);
+      fs.mkdirSync(path.dirname(p), { recursive: true });
+      fs.writeFileSync(p, String(content ?? ""));
+    } else {
+      const w = writeAgentText(agentMount(), spec.agent, String(content ?? ""));
+      if (!w.ok) return w;
+    }
+    log(`writeInstructions: ${scope}/${kind}`);
+    // Live: /piwork-reload re-reads context files (AGENTS.md); SYSTEM/APPEND apply on the next turn.
+    if (bridge) bridge.send({ type: "prompt", message: "/piwork-reload" });
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };

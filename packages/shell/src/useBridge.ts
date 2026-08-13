@@ -26,6 +26,7 @@ export function useBridge() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [currentModel, setCurrentModel] = useState<ModelInfo | null>(null);
+  const [thinkingLevel, setThinkingLevelState] = useState<string>("medium");
   const [stderrLog, setStderrLog] = useState<string[]>([]);
   const [debugLog, setDebugLog] = useState<string[]>([]);
   const [login, setLogin] = useState<LoginState>({ active: false });
@@ -156,6 +157,7 @@ export function useBridge() {
           else if (p.command === "set_model" && p.success) setCurrentModel(p.data ?? null);
           else if (p.command === "get_state" && p.success) {
             if (p.data?.model) setCurrentModel(p.data.model);
+            if (p.data?.thinkingLevel) setThinkingLevelState(p.data.thinkingLevel);
             setStreaming(Boolean(p.data?.isStreaming));
           } else if (p.success === false) {
             pushToast(`${p.command} failed: ${p.error ?? "error"}`, "error");
@@ -487,6 +489,13 @@ export function useBridge() {
   const setModel = useCallback((provider: string, id: string) => {
     window.piwork.send({ id: "set_model", type: "set_model", provider, modelId: id });
   }, []);
+  // Set the thinking level live for this session (Pi no-ops it on non-reasoning models), and
+  // persist it as the default for future sessions.
+  const setThinkingLevel = useCallback((level: string) => {
+    setThinkingLevelState(level);
+    window.piwork.send({ id: "set_thinking", type: "set_thinking_level", level });
+    void window.piwork.setDefaultThinking(level);
+  }, []);
 
   const startLogin = useCallback(async () => {
     setLogin({ active: true, status: "Starting login…" });
@@ -513,7 +522,7 @@ export function useBridge() {
   const closeLogin = useCallback(() => setLogin({ active: false }), []);
 
   return {
-    connection, hello, items, streaming, statuses, widgets, dialog, toasts, models, currentModel, stderrLog, debugLog, login,
+    connection, hello, items, streaming, statuses, widgets, dialog, toasts, models, currentModel, thinkingLevel, setThinkingLevel, stderrLog, debugLog, login,
     recentFolders, launcherFolder, launcherSessions, activeFolder, globalMode, startGlobal,
     artifacts, artifactsOpen, setArtifactsOpen, lastArtifactKey, commands,
     sessionTree, treeOpen, setTreeOpen, openSessionTree, rewindTo, rewinding, injectedText,

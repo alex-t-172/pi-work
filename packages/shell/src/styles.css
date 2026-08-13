@@ -323,3 +323,17 @@ button.primary:hover { filter: brightness(1.08); }
 .add-model { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
 .add-model .kv-row { display: flex; gap: 8px; }
 .add-model input { flex: 1; min-width: 0; background: var(--bg2); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 9px; }
+
+/* Thinking-level segmented control (Model & account panel) */
+.thinking-levels { display: flex; gap: 6px; flex-wrap: wrap; }
+.thinking-lv { background: var(--panel); color: var(--muted); border: 1px solid var(--border); border-radius: 6px; padding: 5px 12px; font-size: 12px; cursor: pointer; text-transform: capitalize; }
+.thinking-lv:hover:not(.active) { border-color: var(--accent); color: var(--fg); }
+.thinking-lv.active { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600; }
+.checkbox-row { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--fg); }
+.checkbox-row input { width: auto; }
+
+/* Instructions / system-prompt editor */
+.instructions-modal { width: min(640px, 94vw); }
+.instr-kinds { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 8px; }
+.instr-editor { width: 100%; min-height: 300px; resize: vertical; background: var(--bg2); color: var(--fg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-family: var(--font-family); font-size: 13px; line-height: 1.5; margin: 10px 0; }
+.instr-editor:focus { outline: none; border-color: var(--accent); }

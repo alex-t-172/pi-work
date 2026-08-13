@@ -61,9 +61,15 @@ export interface PiworkApi {
   /** Answer a login prompt/select by request id. */
   loginInput(id: string, value: string): void;
   /** Add/update a custom model in models.json (merges into a provider, reuses its auth), then reload. */
-  addModel(model: { provider: string; id: string; name?: string }): Promise<{ ok: boolean; error?: string }>;
+  addModel(model: { provider: string; id: string; name?: string; reasoning?: boolean }): Promise<{ ok: boolean; error?: string }>;
   /** Add a custom API-key provider (baseUrl/api/apiKey + a starter model) to models.json, then reload. */
   addProvider(p: { provider: string; api: string; baseUrl?: string; apiKey: string; modelId: string; modelName?: string; reasoning?: boolean }): Promise<{ ok: boolean; error?: string }>;
+  /** Persist the default thinking level (settings.json). Live level is set via the set_thinking_level RPC. */
+  setDefaultThinking(level: string): Promise<{ ok: boolean; error?: string }>;
+  /** Read an instructions file (kind: "agents" | "append" | "replace") for a scope. */
+  readInstructions(scope: "global" | "project", folder: string | undefined, kind: string): Promise<{ ok: boolean; content: string; error?: string }>;
+  /** Write an instructions file and reload. */
+  writeInstructions(scope: "global" | "project", folder: string | undefined, kind: string, content: string): Promise<{ ok: boolean; error?: string }>;
   /** Copy files into the workspace's .attachments/ (git-excluded); returns their workspace paths. */
   attachFiles(workspace: string, sources: string[]): Promise<{ ok: boolean; error?: string; files: Array<{ name: string; relPath: string }> }>;
   /** Open a multi-select file picker; returns chosen source paths (or []). */
@@ -111,6 +117,9 @@ const api: PiworkApi = {
   loginInput: (id, value) => ipcRenderer.send("piwork:loginInput", id, value),
   addModel: (model) => ipcRenderer.invoke("piwork:addModel", model),
   addProvider: (p) => ipcRenderer.invoke("piwork:addProvider", p),
+  setDefaultThinking: (level) => ipcRenderer.invoke("piwork:setDefaultThinking", level),
+  readInstructions: (scope, folder, kind) => ipcRenderer.invoke("piwork:readInstructions", scope, folder, kind),
+  writeInstructions: (scope, folder, kind, content) => ipcRenderer.invoke("piwork:writeInstructions", scope, folder, kind, content),
   attachFiles: (workspace, sources) => ipcRenderer.invoke("piwork:attachFiles", workspace, sources),
   pickAttachFiles: () => ipcRenderer.invoke("piwork:pickAttachFiles"),
   getPathForFile: (file) => webUtils.getPathForFile(file),
