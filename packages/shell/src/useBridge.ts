@@ -391,7 +391,7 @@ export function useBridge() {
     const res = await window.piwork.startSession(folder, session);
     if (!res.ok) {
       setConnection("error");
-      pushToast(res.error ?? "failed to start", "error");
+      pushToast(res.error ?? "Couldn't start the session.", "error");
     } else {
       void refreshRecent();
     }
@@ -406,7 +406,7 @@ export function useBridge() {
     const res = await window.piwork.startGlobalSession(session);
     if (!res.ok) {
       setConnection("error");
-      pushToast(res.error ?? "failed to start", "error");
+      pushToast(res.error ?? "Couldn't start the session.", "error");
     }
   }, [pushToast, resetSessionState]);
 
@@ -448,7 +448,7 @@ export function useBridge() {
           const refs = res.files.map((f) => `\`${f.relPath}\``).join(", ");
           finalText = `${text.trim() ? `${text.trim()}\n\n` : ""}Attached to the workspace: ${refs}`;
         } else if (!res.ok) {
-          pushToast(res.error ?? "couldn't attach file(s)", "error");
+          pushToast(res.error ?? "Couldn't attach the file.", "error");
         }
       }
       if (!finalText.trim()) return;

@@ -478,7 +478,7 @@ ipcMain.handle("piwork:attachFiles", (_e, workspace: string, sources: string[]) 
         files.push({ name, relPath: `${ATTACH_DIR}/${name}` });
       } catch (e) { log(`attach: copy failed for ${src}: ${String(e)}`); }
     }
-    return files.length ? { ok: true, files } : { ok: false, error: "nothing copied", files: [] };
+    return files.length ? { ok: true, files } : { ok: false, error: "No files were copied.", files: [] };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err), files: [] };
   }
@@ -616,7 +616,7 @@ ipcMain.handle("piwork:setMcpServers", (_e, scope: "global" | "project", folder:
   if (scope === "project") {
     const leaky = servers.find((s) => (s.env && Object.keys(s.env).length > 0) || (s.headers && Object.keys(s.headers).length > 0));
     if (leaky) {
-      return { ok: false, error: `“${leaky.label ?? leaky.name}” carries a token/secret, which can't be saved to a project — it would be written to this repo's .pi/mcp.json and could be committed. Add it as a Global connector instead (its secret stays on your machine).` };
+      return { ok: false, error: `“${leaky.label ?? leaky.name}” has a secret, so it can't be a project connector — it would be committed to this repo's .pi/mcp.json. Add it as a Global connector instead.` };
     }
   }
   try { writeMcpServers(scope, folder, servers); return { ok: true }; }

@@ -18,10 +18,10 @@ import rewindIcon from "./assets/rail/rewind.png";
 // Curated presets installable in one click (sources are container-side suite paths).
 const SUITE_PRESETS = [
   { name: "Checkpoint", source: "/opt/piwork-suite/piwork-checkpoint", dir: "piwork-checkpoint", desc: "Git auto-commit before each turn (safety net)" },
-  { name: "Artifacts", source: "/opt/piwork-suite/piwork-artifacts", dir: "piwork-artifacts", desc: "Lets the agent present a finished file or view in the viewer (installed by default)" },
+  { name: "Artifacts", source: "/opt/piwork-suite/piwork-artifacts", dir: "piwork-artifacts", desc: "Present a finished file or view in the viewer" },
   { name: "Tasks", source: "/opt/piwork-suite/piwork-tasks", dir: "piwork-tasks", desc: "A task list the agent maintains, shown as a docked widget" },
-  { name: "Ask", source: "/opt/piwork-suite/piwork-ask", dir: "piwork-ask", desc: "Lets the agent ask you a question (choice / yes-no / text) mid-turn" },
-  { name: "Renderers", source: "/opt/piwork-suite/piwork-renderers", dir: "piwork-renderers", desc: "Extra file renderers for the viewer (CSV/TSV → table) — richer than the built-in text view" },
+  { name: "Ask", source: "/opt/piwork-suite/piwork-ask", dir: "piwork-ask", desc: "Let the agent ask you a question mid-turn" },
+  { name: "Renderers", source: "/opt/piwork-suite/piwork-renderers", dir: "piwork-renderers", desc: "Show CSV and TSV files as tables in the viewer" },
 ];
 
 // MCP connector presets: hosted remote MCP servers that authenticate with OAuth — click
@@ -107,7 +107,7 @@ export default function App() {
   // rail now (variant C: the rail is the whole control surface, the top bar ≈ vanishes).
   const settingsRail: RailItem[] = [
     { key: "model", iconUrl: modelsIcon, label: "Model", onClick: () => setShowModelAccount(true), title: "Model & account" },
-    { key: "theme", iconUrl: themeIcon, label: "Theme", onClick: () => setShowTheme(true), title: "Theme" },
+    { key: "theme", iconUrl: themeIcon, label: "Theme", onClick: () => setShowTheme(true) },
     { key: "debug", iconUrl: debugIcon, label: "Debug", onClick: () => setShowDebug((v) => !v), title: "Debug drawer" },
   ];
   // Tools zone (in-session): the panels/viewers for the running sandbox. Scope for Skills /
@@ -115,13 +115,13 @@ export default function App() {
   const sessionTools: RailItem[] = [
     // Files: only a real workspace has files (the folderless global chat has none).
     ...(b.globalMode || !filesRoot ? [] : [{ key: "files", iconUrl: fileIcon, label: "Files", title: "Browse workspace files", active: filesOpen, onClick: () => setFilesOpen((v) => !v) } as RailItem]),
-    { key: "skills", iconUrl: extensionsIcon, label: "Skills", title: "Manage skills, plugins & extensions", onClick: () => (b.globalMode ? r.openFor("global") : b.activeFolder && r.openFor("project", b.activeFolder)) },
+    { key: "skills", iconUrl: extensionsIcon, label: "Skills", title: "Skills & extensions", onClick: () => (b.globalMode ? r.openFor("global") : b.activeFolder && r.openFor("project", b.activeFolder)) },
     { key: "connect", iconUrl: connectorsIcon, label: "Connect", title: "Manage MCP connectors (Slack, Notion, …)", onClick: () => (b.globalMode ? c.openFor("global") : b.activeFolder && c.openFor("project", b.activeFolder)) },
-    { key: "rewind", iconUrl: rewindIcon, label: "Rewind", disabled: b.streaming, active: b.treeOpen, title: b.streaming ? "Rewind is available when the agent is idle" : "Rewind — jump back to an earlier point", onClick: b.openSessionTree },
+    { key: "rewind", iconUrl: rewindIcon, label: "Rewind", disabled: b.streaming, active: b.treeOpen, title: b.streaming ? "Rewind is available when the agent is idle" : "Jump back to an earlier point", onClick: b.openSessionTree },
   ];
   const homeTools: RailItem[] = [
-    { key: "files", iconUrl: fileIcon, label: "Files", title: "Browse folders — pick where to start a sandbox", active: filesOpen, onClick: () => setFilesOpen((v) => !v) },
-    { key: "skills", iconUrl: extensionsIcon, label: "Skills", title: "Skills, plugins & extensions", onClick: () => r.openFor("global") },
+    { key: "files", iconUrl: fileIcon, label: "Files", title: "Browse folders", active: filesOpen, onClick: () => setFilesOpen((v) => !v) },
+    { key: "skills", iconUrl: extensionsIcon, label: "Skills", title: "Skills & extensions", onClick: () => r.openFor("global") },
     { key: "connect", iconUrl: connectorsIcon, label: "Connect", title: "MCP connectors (Slack, Notion, …)", onClick: () => c.openFor("global") },
   ];
   return (
@@ -539,8 +539,8 @@ function SessionTreePanel(props: { data: { tree: TreeNode[]; leaf: string | null
       </header>
       <div className="tree-hint">
         {props.busy
-          ? "Agent is working — rewind is available when it's idle."
-          : "Jump back to any point. Click one of your messages to edit & resend from there, or a reply to continue after it."}
+          ? "Rewind is available when the agent is idle."
+          : "Jump back to any point — edit one of your messages, or continue after a reply."}
       </div>
       <div className="tree-body-wrap">
         <div className={`tree-body ${disabled ? "busy" : ""}`}>
@@ -612,7 +612,7 @@ function ArtifactsPane(props: {
           <strong className="art-title">{title}</strong>
         )}
         {active === "file" && (
-          <span className="ro-chip" title="Files here are read-only — start a session and ask the agent to make changes">read-only</span>
+          <span className="ro-chip" title="Read-only. Start a session to make changes.">read-only</span>
         )}
         <div className="spacer" />
         <button onClick={props.onClose} title="Close panel">✕</button>
@@ -663,7 +663,7 @@ function ActivityRail(props: { tools: RailItem[]; settings: RailItem[]; anchor?:
       className={`rail-btn${it.active ? " active" : ""}`}
       onClick={it.onClick}
       disabled={it.disabled}
-      title={it.title ?? it.label}
+      title={it.title}
     >
       <span className="rail-ico">{it.iconUrl ? <img className="rail-img" src={it.iconUrl} alt="" /> : it.iconNode}</span>{it.label}
       {it.badge != null && it.badge > 0 && <span className="rail-badge">{it.badge}</span>}
@@ -712,7 +712,7 @@ function TopBar(props: {
         {props.folderName && <span className="ctx-label" title={props.folderPath}>{props.folderName}</span>}
         {props.connection && <span className={`conn-dot conn-dot-${props.connection}`} title={dotTitle} />}
         {props.onBack && (
-          <button className="ctx-back" onClick={props.onBack} title="End this session (stops the sandbox) — back to this folder's sessions">◀ End session</button>
+          <button className="ctx-back" onClick={props.onBack} title="Back to this folder's sessions">◀ End session</button>
         )}
       </div>
       <div className="spacer" />
@@ -835,10 +835,10 @@ function Chat(props: { items: ChatItem[]; connection: string; globalMode: boolea
         ) : props.globalMode ? (
           <div className="empty-global">
             <h3>Global chat</h3>
-            <p className="hint">Chat with your connectors &amp; skills. No files — but you can ask it to add global skills, commands or tools.</p>
+            <p className="hint">Chat with your connectors and skills — no file access. Ask it to add global skills or tools.</p>
           </div>
         ) : (
-          <div className="hint">Ready. Type a message below.</div>
+          <div className="hint">Type a message to start.</div>
         )}
         <div ref={endRef} />
       </div>
@@ -1384,12 +1384,12 @@ function AddModel(props: { defaultProvider: string }) {
     const r = await window.piwork.addModel({ provider: provider.trim(), id: id.trim(), name: name.trim() || undefined });
     setBusy(false);
     if (r.ok) { setId(""); setName(""); setOpen(false); } // the reload re-emits the list; the new model appears
-    else setErr(r.error ?? "couldn't add model");
+    else setErr(r.error ?? "Couldn't add the model.");
   };
   if (!open) return <button className="link add-model-open" onClick={() => setOpen(true)}>+ Add a model Pi doesn't list yet</button>;
   return (
     <div className="add-model">
-      <div className="muted">For a model the Pi SDK doesn't know yet (e.g. a new Opus). Reuses your provider's login and reloads the session.</div>
+      <div className="muted">Add a model Pi doesn't list yet. Uses your existing login.</div>
       <div className="kv-row">
         <input placeholder="provider (e.g. anthropic)" value={provider} onChange={(e) => setProvider(e.target.value)} />
         <input placeholder="model id (e.g. claude-opus-5)" value={id} onChange={(e) => setId(e.target.value)} />
@@ -1424,7 +1424,7 @@ function AddProvider() {
     setBusy(true); setErr(null);
     const r = await window.piwork.addProvider({ provider: provider.trim(), api, baseUrl: baseUrl.trim() || undefined, apiKey: apiKey.trim(), modelId: modelId.trim(), modelName: modelName.trim() || undefined, reasoning: false });
     setBusy(false);
-    if (r.ok) { setOpen(false); setApiKey(""); } else setErr(r.error ?? "couldn't add provider");
+    if (r.ok) { setOpen(false); setApiKey(""); } else setErr(r.error ?? "Couldn't add the provider.");
   };
   if (!open) return <button className="link add-model-open" onClick={() => setOpen(true)}>+ Add a provider by API key (e.g. Mistral)</button>;
   return (

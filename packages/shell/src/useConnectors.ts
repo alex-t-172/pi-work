@@ -45,7 +45,7 @@ export function useConnectors() {
 
   const connect = useCallback(async (name: string) => {
     setError(null);
-    setBusy(`Connecting ${name}… (a browser window will open)`);
+    setBusy(`Connecting ${name}…`);
     const r = await window.piwork.mcpConnect(name, mode, mode === "project" ? folder : undefined);
     setBusy(null);
     if (!r.ok) setError(r.error ?? "connect failed");
