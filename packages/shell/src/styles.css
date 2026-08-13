@@ -340,3 +340,10 @@ button.primary:hover { filter: brightness(1.08); }
 
 /* Read-only view of the composed system prompt */
 .sysprompt-view { max-height: 320px; overflow: auto; background: var(--code); color: var(--fg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 12px; line-height: 1.5; white-space: pre-wrap; margin-top: 8px; }
+
+/* Modal tabs (Customise) */
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin: 4px 0 14px; }
+.tabs button { background: transparent; border: none; border-bottom: 2px solid transparent; border-radius: 0; color: var(--muted); padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.tabs button:hover:not(.active) { color: var(--fg); }
+.tabs button.active { color: var(--fg); border-bottom-color: var(--accent); }
+.callout { background: color-mix(in srgb, var(--accent) 10%, var(--bg2)); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 13px; margin-bottom: 12px; }

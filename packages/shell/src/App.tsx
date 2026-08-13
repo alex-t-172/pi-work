@@ -115,13 +115,13 @@ export default function App() {
   const sessionTools: RailItem[] = [
     // Files: only a real workspace has files (the folderless global chat has none).
     ...(b.globalMode || !filesRoot ? [] : [{ key: "files", iconUrl: fileIcon, label: "Files", title: "Browse workspace files", active: filesOpen, onClick: () => setFilesOpen((v) => !v) } as RailItem]),
-    { key: "skills", iconUrl: extensionsIcon, label: "Skills", title: "Skills, extensions & instructions", onClick: () => (b.globalMode ? r.openFor("global") : b.activeFolder && r.openFor("project", b.activeFolder)) },
+    { key: "skills", iconUrl: extensionsIcon, label: "Customise", title: "Customise the agent — instructions, extensions & skills", onClick: () => (b.globalMode ? r.openFor("global") : b.activeFolder && r.openFor("project", b.activeFolder)) },
     { key: "connect", iconUrl: connectorsIcon, label: "Connect", title: "Manage MCP connectors (Slack, Notion, …)", onClick: () => (b.globalMode ? c.openFor("global") : b.activeFolder && c.openFor("project", b.activeFolder)) },
     { key: "rewind", iconUrl: rewindIcon, label: "Rewind", disabled: b.streaming, active: b.treeOpen, title: b.streaming ? "Rewind is available when the agent is idle" : "Jump back to an earlier point", onClick: b.openSessionTree },
   ];
   const homeTools: RailItem[] = [
     { key: "files", iconUrl: fileIcon, label: "Files", title: "Browse folders", active: filesOpen, onClick: () => setFilesOpen((v) => !v) },
-    { key: "skills", iconUrl: extensionsIcon, label: "Skills", title: "Skills, extensions & instructions", onClick: () => r.openFor("global") },
+    { key: "skills", iconUrl: extensionsIcon, label: "Customise", title: "Customise the agent — instructions, extensions & skills", onClick: () => r.openFor("global") },
     { key: "connect", iconUrl: connectorsIcon, label: "Connect", title: "MCP connectors (Slack, Notion, …)", onClick: () => c.openFor("global") },
   ];
   return (
@@ -1110,93 +1110,110 @@ function ScopeBadge({ scope }: { scope?: string }) {
   return <span className={`scope-badge scope-${scope}`}>{label}</span>;
 }
 
+// "Customise" — how you shape the agent, in tabs under one scope switch:
+//   Instructions (context + system prompt) · Extensions (code capabilities you install) ·
+//   Skills (knowledge — added via a skill manager in a session; read-only here).
 function ResourcesModal(props: { r: ReturnType<typeof useResources>; inSession: boolean; projectFolder?: string; systemPrompt: string | null; onFetchSystemPrompt: () => void; onClose: () => void }) {
   const { r } = props;
   const isGlobal = r.mode === "global";
   const managedScope = isGlobal ? "user" : "project";
   const [source, setSource] = useState("");
+  const [tab, setTab] = useState<"instructions" | "extensions" | "skills">("instructions");
   const d: ResourceList = r.data ?? { skills: [], extensions: [], prompts: [], packages: [] };
 
   const managedPkgs = d.packages.filter((p) => p.scope === managedScope);
   const inheritedPkgs = isGlobal ? [] : d.packages.filter((p) => p.scope === "user");
-  const installedDirs = new Set(managedPkgs.map((p) => basename(p.source)));
   const managed = (items: ResourceItem[]) => items.filter((i) => i.scope === managedScope);
   const inherited = (items: ResourceItem[]) => (isGlobal ? [] : items.filter((i) => i.scope === "user"));
-
   const loading = r.data === null;
+
+  // Inheritance-aware package status (project inherits global). Identity: the package dir/basename
+  // (the settings source is relative, so basename is the reliable key against a preset's dir).
+  const presetDirs = new Set(SUITE_PRESETS.map((p) => p.dir));
+  const installedHere = new Set(managedPkgs.map((p) => basename(p.source)));
+  const inheritedGlobal = new Set(inheritedPkgs.map((p) => basename(p.source)));
+  const arbitraryHere = managedPkgs.filter((p) => !presetDirs.has(basename(p.source)));
+  const arbitraryInherited = inheritedPkgs.filter((p) => !presetDirs.has(basename(p.source)));
+  const removeScope = managedScope === "user" ? "global" : "project" as const;
+
   return (
     <ModalShell
       className="resources-modal"
-      title="Extensions, skills & instructions"
+      title="Customise"
       subtitle={isGlobal ? "Global — available in every project" : `${basename(r.workspace)} — this project only`}
       headerExtra={r.dirty && props.inSession ? <button className="primary" onClick={r.reload}>Reload to apply</button> : undefined}
       onClose={props.onClose}
     >
         <ScopeSwitch scope={r.mode} projectFolder={props.projectFolder} onGlobal={() => r.openFor("global")} onProject={(f) => r.openFor("project", f)} />
+        <div className="tabs">
+          <button className={tab === "instructions" ? "active" : ""} onClick={() => setTab("instructions")}>Instructions</button>
+          <button className={tab === "extensions" ? "active" : ""} onClick={() => setTab("extensions")}>Extensions</button>
+          <button className={tab === "skills" ? "active" : ""} onClick={() => setTab("skills")}>Skills</button>
+        </div>
         {r.error && <div className="res-error">{r.error}</div>}
         {r.busy && <Loading label={r.busy} />}
 
-        <div className="theme-section">Instructions</div>
-        <InstructionsSection scope={r.mode} folder={props.projectFolder} />
-        <div className="theme-section">Current system prompt</div>
-        <SystemPromptView prompt={props.systemPrompt} onFetch={props.onFetchSystemPrompt} canFetch={props.inSession} />
-
-        <div className="theme-section">Add a preset</div>
-        <div className="preset-list">
-          {SUITE_PRESETS.map((p) => (
-            <div key={p.dir} className="res-row">
-              <div className="res-main"><span className="res-name">{p.name}</span><span className="res-desc">{p.desc}</span></div>
-              {installedDirs.has(p.dir)
-                ? <span className="muted">installed</span>
-                : <button onClick={() => r.install(p.source)}>Install</button>}
-            </div>
-          ))}
-        </div>
-
-        <div className="theme-section">Install by source</div>
-        <div className="install-row">
-          <input placeholder="npm:pkg-name · git:host/user/repo · /path" value={source} onChange={(e) => setSource(e.target.value)} />
-          <button disabled={!source.trim()} onClick={() => { r.install(source.trim()); setSource(""); }}>
-            {isGlobal ? "Install globally" : "Install for project"}
-          </button>
-        </div>
-
-        {loading ? (
-          <Loading label="Loading installed resources…" />
-        ) : (
+        {tab === "instructions" && (
           <>
-            {managedPkgs.length > 0 && (
-              <>
-                <div className="theme-section">Installed plugins</div>
-                {managedPkgs.map((p: PackageItem) => (
-                  <div key={`${p.scope}:${p.source}`} className="res-row">
-                    <div className="res-main"><span className="res-name">{basename(p.source)}</span><span className="res-desc">{p.source}</span></div>
-                    <button className="secondary" onClick={() => r.remove(p.source, managedScope === "user" ? "global" : "project")}>Remove</button>
-                  </div>
-                ))}
-              </>
-            )}
-
-            <ResourceGroup title="Extensions" items={managed(d.extensions)} render={(e) => e.commands?.length ? `commands: ${e.commands.join(", ")}` : ""} />
-            <ResourceGroup title="Skills" items={managed(d.skills)} render={(s) => s.description ?? ""} />
-            <ResourceGroup title="Prompts" items={managed(d.prompts)} render={(p) => p.description ?? ""} />
-
-            {!isGlobal && (inheritedPkgs.length + inherited(d.extensions).length + inherited(d.skills).length > 0) && (
-              <>
-                <div className="theme-section">Inherited from global <span className="muted">(manage in Home)</span></div>
-                {inheritedPkgs.map((p) => (
-                  <div key={`g:${p.source}`} className="res-row"><div className="res-main"><span className="res-name">{basename(p.source)}</span></div><ScopeBadge scope="user" /></div>
-                ))}
-                {[...inherited(d.extensions), ...inherited(d.skills)].map((i) => (
-                  <div key={`g:${i.name}:${i.path ?? ""}`} className="res-row"><div className="res-main"><span className="res-name">{i.name}</span><span className="res-desc">{i.description ?? (i.commands?.length ? `commands: ${i.commands.join(", ")}` : "")}</span></div><ScopeBadge scope="user" /></div>
-                ))}
-              </>
-            )}
+            <div className="theme-section">Current system prompt</div>
+            <SystemPromptView prompt={props.systemPrompt} onFetch={props.onFetchSystemPrompt} canFetch={props.inSession} />
+            <div className="theme-section">Edit instructions</div>
+            <InstructionsSection scope={r.mode} folder={props.projectFolder} />
           </>
         )}
 
-        {isGlobal && (
+        {tab === "extensions" && (
           <>
+            <div className="preset-list">
+              {SUITE_PRESETS.map((p) => (
+                <div key={p.dir} className="res-row">
+                  <div className="res-main"><span className="res-name">{p.name}</span><span className="res-desc">{p.desc}</span></div>
+                  {installedHere.has(p.dir)
+                    ? <button className="secondary" onClick={() => r.remove(p.source, removeScope)}>Remove</button>
+                    : inheritedGlobal.has(p.dir)
+                      ? <span className="muted">Global · inherited</span>
+                      : <button onClick={() => r.install(p.source)}>Install</button>}
+                </div>
+              ))}
+              {arbitraryHere.map((p) => (
+                <div key={`h:${p.source}`} className="res-row">
+                  <div className="res-main"><span className="res-name">{basename(p.source)}</span><span className="res-desc">{p.source}</span></div>
+                  <button className="secondary" onClick={() => r.remove(p.source, removeScope)}>Remove</button>
+                </div>
+              ))}
+              {arbitraryInherited.map((p) => (
+                <div key={`i:${p.source}`} className="res-row">
+                  <div className="res-main"><span className="res-name">{basename(p.source)}</span><span className="res-desc">{p.source}</span></div>
+                  <span className="muted">Global · inherited</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="theme-section">Install by source</div>
+            <div className="install-row">
+              <input placeholder="npm:pkg-name · git:host/user/repo · /path" value={source} onChange={(e) => setSource(e.target.value)} />
+              <button disabled={!source.trim()} onClick={() => { r.install(source.trim()); setSource(""); }}>
+                {isGlobal ? "Install globally" : "Install for project"}
+              </button>
+            </div>
+
+            {loading
+              ? <Loading label="Loading…" />
+              : <ResourceGroup title="Active" items={[...managed(d.extensions), ...inherited(d.extensions)]} render={(e) => e.commands?.length ? `commands: ${e.commands.join(", ")}` : ""} scoped />}
+          </>
+        )}
+
+        {tab === "skills" && (
+          <>
+            <div className="callout">Add skills with a skill manager (e.g. <b>Tessl</b> or <b>skills.sh</b>) — ask the agent to install them for this project or globally in a session.</div>
+            {loading ? (
+              <Loading label="Loading…" />
+            ) : (
+              <>
+                <ResourceGroup title="Active skills" items={[...managed(d.skills), ...inherited(d.skills)]} render={(s) => s.description ?? ""} scoped />
+                <ResourceGroup title="Prompt templates" items={[...managed(d.prompts), ...inherited(d.prompts)]} render={(p) => p.description ?? ""} scoped />
+              </>
+            )}
             <div className="theme-section">Global skills folder</div>
             <label className="tune-row">
               <input type="checkbox" checked={!!r.config.shareAgentsDir} onChange={(e) => r.setShareAgents(e.target.checked)} />
@@ -1208,7 +1225,7 @@ function ResourcesModal(props: { r: ReturnType<typeof useResources>; inSession: 
   );
 }
 
-function ResourceGroup({ title, items, render }: { title: string; items: ResourceItem[]; render: (i: ResourceItem) => string }) {
+function ResourceGroup({ title, items, render, scoped }: { title: string; items: ResourceItem[]; render: (i: ResourceItem) => string; scoped?: boolean }) {
   if (!items || items.length === 0) return null;
   return (
     <>
@@ -1216,6 +1233,7 @@ function ResourceGroup({ title, items, render }: { title: string; items: Resourc
       {items.map((i) => (
         <div key={`${i.scope}:${i.name}:${i.path ?? ""}`} className="res-row">
           <div className="res-main"><span className="res-name">{i.name}</span><span className="res-desc">{render(i)}</span></div>
+          {scoped && <ScopeBadge scope={i.scope ?? "project"} />}
         </div>
       ))}
     </>
