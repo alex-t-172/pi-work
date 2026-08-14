@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Activity, ChatItem, Connection, LoginState, McpStatusEntry, ModelInfo, SessionMeta, Toast, TreeNode, UiDialog } from "./types.ts";
 
+// Extensions written for Pi's terminal UI (e.g. pi-mcp-adapter) color their status/widget/
+// notify text with ANSI escape codes. Pi's TUI renders them; our GUI would show the raw codes
+// (e.g. "\x1b[38;5;109mMCP: 0/1 servers"), so strip them before display — we style chips in CSS.
+// eslint-disable-next-line no-control-regex
+const ANSI_RE = /\u001b\[[0-9;]*[A-Za-z]/g;
+const stripAnsi = (s: unknown): string => String(s ?? "").replace(ANSI_RE, "");
+
 // Mirrors piwork-ui's PIWORK_INTENT_SENTINEL. Extensions ride richer intents on `notify`
 // until they become first-class (once we own the shim). Kept in sync by convention.
 const PIWORK_INTENT_SENTINEL = "__piworkIntent__";
@@ -269,7 +276,7 @@ export function useBridge() {
           if (intent?.kind === "openExternal" && typeof intent.url === "string") {
             window.piwork.openExternal(intent.url);
           } else {
-            pushToast(String(p.message ?? ""), p.notifyType ?? "info");
+            pushToast(stripAnsi(p.message), p.notifyType ?? "info");
           }
           break;
         }
@@ -277,7 +284,7 @@ export function useBridge() {
           setStatuses((s) => {
             const next = { ...s };
             if (p.statusText === undefined || p.statusText === null) delete next[p.statusKey];
-            else next[p.statusKey] = p.statusText;
+            else next[p.statusKey] = stripAnsi(p.statusText);
             return next;
           });
           break;
@@ -286,7 +293,7 @@ export function useBridge() {
           setWidgets((w) => {
             const group = { ...w[placement] };
             if (p.widgetLines === undefined || p.widgetLines === null) delete group[p.widgetKey];
-            else group[p.widgetKey] = p.widgetLines;
+            else group[p.widgetKey] = (Array.isArray(p.widgetLines) ? p.widgetLines : []).map(stripAnsi);
             return { ...w, [placement]: group };
           });
           break;
