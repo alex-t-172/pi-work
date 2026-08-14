@@ -20,8 +20,12 @@ import * as fs from "node:fs";
 import * as nodePath from "node:path";
 import * as crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
+// ── Pi SDK binding surface ──────────────────────────────────────────────────────────
+// This import block is the SINGLE place pi-host binds to the Pi SDK. When upgrading Pi
+// (see packages/pi-host/UPGRADING-PI.md), reconcile any renamed/removed symbols HERE and
+// in login.ts (the isolated auth adapter); everything else in this file is Pi-agnostic.
+// Pinned version lives in packages/pi-host/package.json. Current: pi-coding-agent 0.84.0.
 import {
-  AuthStorage,
   type CreateAgentSessionRuntimeFactory,
   createAgentSessionFromServices,
   createAgentSessionRuntime,
@@ -29,6 +33,7 @@ import {
   DefaultPackageManager,
   DefaultResourceLoader,
   getAgentDir,
+  ModelRuntime,
   runRpcMode,
   SessionManager,
   SettingsManager,
@@ -187,7 +192,7 @@ const PIWORK_ENV_FOLDER = `You are running inside Piwork, a desktop app that put
 - The user reads your replies in a graphical app, not a terminal, so don't rely on keystroke- or TUI-only instructions.`;
 const PIWORK_ENV_GLOBAL = `You are running inside Piwork, a desktop app for pi. This is a folderless global chat: you have no file access here, but you can help the user set up and customise Piwork itself — its global skills, commands, and tools.`;
 
-const piworkBaseExtension = (pi: {
+export const piworkBaseExtension = (pi: {
   registerCommand: (name: string, opts: { description: string; handler: (args: string, ctx: any) => Promise<void> }) => void;
   on: (event: string, handler: (event: any, ctx: any) => unknown) => void;
 }) => {
@@ -474,7 +479,7 @@ async function loadMcpAdapter(): Promise<unknown | null> {
   }
 }
 
-const createRuntime: CreateAgentSessionRuntimeFactory = async ({ cwd, sessionManager, sessionStartEvent }) => {
+export const createRuntime: CreateAgentSessionRuntimeFactory = async ({ cwd, sessionManager, sessionStartEvent }) => {
   const factories: unknown[] = [piworkBaseExtension];
   // The authoring tools exist only in the global console; global skills/extensions they
   // write land in the agent store's native scan locations, so they load everywhere with
@@ -508,7 +513,7 @@ const createRuntime: CreateAgentSessionRuntimeFactory = async ({ cwd, sessionMan
 // The package's `exports` map blocks the deep specifier, so import the file by ABSOLUTE
 // path (allowed) — and since the theme lives on globalThis, this sets the value every
 // module instance reads. Defensive: a failure just means we skip it.
-async function initPiTheme(): Promise<void> {
+export async function initPiTheme(): Promise<void> {
   try {
     const entry = fileURLToPath(import.meta.resolve("@earendil-works/pi-coding-agent")); // …/dist/index.js
     const themePath = nodePath.join(nodePath.dirname(entry), "modes/interactive/theme/theme.js");
@@ -603,16 +608,24 @@ function cryptoRandomId(): string {
 }
 
 const mode = process.env.PIWORK_MODE;
-const entry =
-  mode === "login"
-    ? runLogin(AuthStorage.create(nodePath.join(getAgentDir(), "auth.json")), process.env.PIWORK_LOGIN_PROVIDER)
-    : mode === "list"
-      ? runList()
-      : mode === "resources"
-        ? runResources()
-        : main();
+async function dispatch(): Promise<void> {
+  if (mode === "login") {
+    // 0.84: OAuth login is driven by ModelRuntime (AuthStorage was removed). Bind it to the
+    // same auth.json the session uses so credentials land where the runtime later reads them.
+    const runtime = await ModelRuntime.create({ authPath: nodePath.join(getAgentDir(), "auth.json") });
+    return runLogin(runtime, process.env.PIWORK_LOGIN_PROVIDER);
+  }
+  if (mode === "list") return runList();
+  if (mode === "resources") return runResources();
+  return main();
+}
 
-entry.catch((err) => {
-  console.error("[pi-host] fatal:", err instanceof Error ? err.stack ?? err.message : String(err));
-  process.exit(1);
-});
+// Only launch when run as the entrypoint. Importing this module (e.g. the verify-pi harness,
+// which reuses createRuntime / piworkBaseExtension) must NOT start the RPC bridge or exit.
+const isEntrypoint = !!process.argv[1] && fileURLToPath(import.meta.url) === nodePath.resolve(process.argv[1]);
+if (isEntrypoint) {
+  dispatch().catch((err) => {
+    console.error("[pi-host] fatal:", err instanceof Error ? err.stack ?? err.message : String(err));
+    process.exit(1);
+  });
+}
