@@ -836,8 +836,43 @@ ipcMain.on("piwork:openExternal", (_e, url: string) => {
 
 // ── OAuth login relay ──────────────────────────────────────────────────────────
 // Runs a short-lived container in pi-host "login" mode against the SAME agent store
-// the session uses. pi-host does the actual OAuth via Pi's AuthStorage.login; we ferry
-// its callbacks to the renderer and open URLs in the user's real browser.
+// the session uses. pi-host drives Pi's ModelRuntime.login; we ferry its callbacks to
+// the renderer and open URLs in the user's real browser.
+//
+// Seamless callback (no manual URL paste): Pi's provider OAuth runs a loopback callback
+// server on a FIXED port (anthropic 53692, openai-codex 1455, radius 1456) and honors
+// PI_OAUTH_CALLBACK_HOST. We bind that server to 0.0.0.0 in the container and publish the
+// port to the host, so the browser's redirect to localhost:<port> reaches Pi's OWN callback
+// server — it completes the exchange and serves its own success page. Ephemeral-port
+// providers (openrouter) and any busy host port fall back to Pi's manual-paste prompt.
+const OAUTH_CALLBACK_PORTS = [53692, 1455, 1456];
+function portFree(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const net = require("node:net") as typeof import("node:net");
+    const srv = net.createServer();
+    srv.once("error", () => resolve(false));
+    srv.once("listening", () => srv.close(() => resolve(true)));
+    srv.listen(port, "127.0.0.1");
+  });
+}
+async function oauthPortPublishArgs(): Promise<string[]> {
+  const args: string[] = [];
+  for (const p of OAUTH_CALLBACK_PORTS) {
+    if (await portFree(p)) args.push("-p", `127.0.0.1:${p}:${p}`);
+    else log(`login: host port ${p} busy — its provider falls back to manual paste`);
+  }
+  return args;
+}
+// Bring Piwork to the front — after the browser sign-in completes, or when a manual paste is
+// needed — so the user isn't stranded in the browser wondering what to do next.
+function focusWindow(): void {
+  if (!win) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+  if (process.platform === "darwin") app.focus({ steal: true });
+}
+
 ipcMain.handle("piwork:startLogin", async (_e, provider?: string) => {
   if (!lastAgent) return { ok: false, error: "Open a folder first (login targets that workspace's agent store)." };
   try {
@@ -847,14 +882,17 @@ ipcMain.handle("piwork:startLogin", async (_e, provider?: string) => {
     loginBridge.on("error", (err) => forward("login", { type: "login_error", message: err.message }));
     loginBridge.on("exit", (code) => log(`[login] container exit ${code}`));
     loginBridge.on("event", (e) => handleLoginEvent(e));
-    log(`starting login container${provider ? ` provider=${provider}` : ""}`);
+    const portArgs = await oauthPortPublishArgs();
+    log(`starting login container${provider ? ` provider=${provider}` : ""}; published ${portArgs.length / 2} callback port(s)`);
     loginBridge.start({
       workspace: lastAgent.workspace,
       image: IMAGE,
       addHostGateway: DEV_ADD_HOST_GATEWAY,
       agentHostDir: lastAgent.agentHostDir,
       agentVolume: lastAgent.agentVolume,
-      env: { PIWORK_MODE: "login", ...(provider ? { PIWORK_LOGIN_PROVIDER: provider } : {}) },
+      // Bind Pi's OAuth callback server to all interfaces so the published port reaches it.
+      env: { PIWORK_MODE: "login", PI_OAUTH_CALLBACK_HOST: "0.0.0.0", ...(provider ? { PIWORK_LOGIN_PROVIDER: provider } : {}) },
+      extraDockerArgs: portArgs,
     });
     return { ok: true };
   } catch (err) {
@@ -866,6 +904,9 @@ function handleLoginEvent(e: Record<string, any>) {
   // Open login/verification URLs in the user's real browser.
   if (e.type === "login_open_url" && typeof e.url === "string") void shell.openExternal(e.url);
   if (e.type === "login_device_code" && typeof e.verificationUri === "string") void shell.openExternal(e.verificationUri);
+  // Pull Piwork back to the front when the browser hand-off is done (seamless callback) or
+  // when the user needs to paste something (fallback) — so they're never stranded.
+  if (e.type === "login_done" || e.type === "login_prompt" || e.type === "login_select") focusWindow();
   forward("login", e);
   if (e.type === "login_done") {
     log("login done → restarting session to pick up new credentials");
