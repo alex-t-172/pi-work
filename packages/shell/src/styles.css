@@ -121,6 +121,7 @@ button.secondary { background: transparent; }
 .chip { font-size: 12px; color: var(--muted); background: var(--panel); border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; }
 .chip-live { color: var(--fg); display: inline-flex; align-items: center; gap: 6px; }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--live); animation: pulse 1.2s infinite; }
+.elapsed { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 11px; }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
 
 .widgets { padding: 6px 12px; display: flex; flex-direction: column; gap: 8px; }

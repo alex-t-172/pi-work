@@ -207,3 +207,16 @@ export interface ModelInfo {
 }
 
 export type Connection = "idle" | "starting" | "connected" | "exited" | "error";
+
+/** What the agent is doing right now (drives the live status indicator). */
+export type ActivityPhase = "working" | "thinking" | "responding" | "toolcall" | "tool";
+export interface Activity {
+  phase: ActivityPhase;
+  /** For the "tool" phase: the tool name being executed. */
+  label?: string;
+  /** Client clock (ms, Date.now) when this phase began — for an elapsed timer. */
+  since: number;
+  /** For the "toolcall" phase: accumulated size of streamed tool-call arguments, so a
+   *  long "writing a big doc into a tool call" reads as active production, not a freeze. */
+  bytes?: number;
+}

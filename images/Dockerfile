@@ -27,6 +27,7 @@ RUN npm install --omit=dev --no-audit --no-fund
 # to "remap" them to shims), so a standalone bake fails at import with ERR_MODULE_NOT_FOUND
 # and MCP quietly doesn't load. 2.11.0 still DECLARES those as real deps, so `npm install`
 # self-contains it. Bump deliberately (and re-verify the adapter imports) rather than floating.
+# See packages/pi-host/UPGRADING-PI.md ("The mcp-adapter") for how it relates to the Pi version.
 RUN mkdir -p /opt/pi-mcp-adapter && cd /opt/pi-mcp-adapter \
   && npm pack pi-mcp-adapter@2.11.0 --silent \
   && tar -xzf pi-mcp-adapter-*.tgz --strip-components=1 \
@@ -37,6 +38,17 @@ RUN mkdir -p /opt/pi-mcp-adapter && cd /opt/pi-mcp-adapter \
 COPY packages/pi-host/src ./src
 # Baked-in Piwork skills (always available: the "how to write an extension" guide).
 COPY packages/pi-host/skills ./skills
+# The Pi-SDK contract harness (also runnable at dev time via scripts/verify-pi.sh).
+COPY packages/pi-host/scripts ./scripts
+
+# BUILD-TIME GATE: assert pi-host still binds to the pinned Pi SDK (all imports resolve,
+# extensions load with zero errors, ModelRuntime/OAuth surface intact, system-prompt hook
+# works). Runs offline as root. If a Pi upgrade breaks the binding, the IMAGE FAILS TO BUILD
+# here rather than at runtime in the GUI. See packages/pi-host/UPGRADING-PI.md.
+# The build-time agent dir is ephemeral (shadowed by the mounted store at runtime); remove it
+# so the harness's cache files don't ship in the image.
+RUN node --experimental-transform-types /opt/pi-host/scripts/verify-pi.mjs \
+  && rm -rf /root/.pi/agent
 
 # The mounted project lives here.
 WORKDIR /workspace

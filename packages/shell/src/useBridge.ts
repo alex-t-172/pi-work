@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ChatItem, Connection, LoginState, McpStatusEntry, ModelInfo, SessionMeta, Toast, TreeNode, UiDialog } from "./types.ts";
+import type { Activity, ChatItem, Connection, LoginState, McpStatusEntry, ModelInfo, SessionMeta, Toast, TreeNode, UiDialog } from "./types.ts";
 
 // Mirrors piwork-ui's PIWORK_INTENT_SENTINEL. Extensions ride richer intents on `notify`
 // until they become first-class (once we own the shim). Kept in sync by convention.
@@ -20,6 +20,10 @@ export function useBridge() {
   const [hello, setHello] = useState<{ piVersion: string; sessionId?: string } | null>(null);
   const [items, setItems] = useState<ChatItem[]>([]);
   const [streaming, setStreaming] = useState(false);
+  // What the agent is doing right now, for a phase-aware live indicator. `since` is a
+  // client clock (ms) reset on each phase change, so the UI can show elapsed-in-phase —
+  // a ticking timer = liveness, a long-climbing one = probably stuck.
+  const [activity, setActivity] = useState<Activity | null>(null);
   const [statuses, setStatuses] = useState<Record<string, string>>({});
   const [widgets, setWidgets] = useState<{ above: Record<string, string[]>; below: Record<string, string[]> }>({ above: {}, below: {} });
   const [dialog, setDialog] = useState<UiDialog | null>(null);
@@ -160,6 +164,8 @@ export function useBridge() {
             if (p.data?.model) setCurrentModel(p.data.model);
             if (p.data?.thinkingLevel) setThinkingLevelState(p.data.thinkingLevel);
             setStreaming(Boolean(p.data?.isStreaming));
+            // On reconnect mid-stream we don't know the phase; show a generic working state.
+            setActivity((a) => (p.data?.isStreaming ? a ?? { phase: "working", since: Date.now() } : null));
           } else if (p.success === false) {
             pushToast(`${p.command} failed: ${p.error ?? "error"}`, "error");
           }
@@ -170,6 +176,7 @@ export function useBridge() {
           break;
         case "exit":
           setStreaming(false);
+          setActivity(null);
           if (intentionalEnd.current) {
             intentionalEnd.current = false; // user ended it; endSession owns the connection state
           } else {
@@ -189,6 +196,7 @@ export function useBridge() {
       switch (p.type) {
         case "agent_start":
           setStreaming(true);
+          setActivity({ phase: "working", since: Date.now() });
           break;
         case "message_end":
           // Close the current assistant bubble at each message boundary. A single turn
@@ -198,14 +206,31 @@ export function useBridge() {
           break;
         case "agent_end":
           setStreaming(false);
+          setActivity(null);
           finalizeAssistant();
           break;
         case "message_update": {
           const ev = p.assistantMessageEvent;
           if (!ev) break;
-          if (ev.type === "text_delta") appendText(ev.delta ?? "");
-          else if (ev.type === "thinking_delta") appendThinking(ev.delta ?? "");
-          else if (ev.type === "done") finalizeAssistant();
+          if (ev.type === "text_delta") {
+            appendText(ev.delta ?? "");
+            setActivity((a) => (a && a.phase === "responding" ? a : { phase: "responding", since: Date.now() }));
+          } else if (ev.type === "thinking_delta") {
+            appendThinking(ev.delta ?? "");
+            setActivity((a) => (a && a.phase === "thinking" ? a : { phase: "thinking", since: Date.now() }));
+          } else if (ev.type === "toolcall_start" || ev.type === "toolcall_delta") {
+            // The model is streaming a tool call's arguments (e.g. writing a doc into the
+            // call) — this can take many seconds with no visible text. Give it its own phase
+            // so it doesn't read as a frozen "Responding…", and accumulate the streamed size
+            // so a growing byte count shows it's actively producing. The tool name isn't in
+            // these events (0.84 stripped the cumulative `partial`); it arrives at execution.
+            const add = ev.delta ? String(ev.delta).length : 0;
+            setActivity((a) =>
+              a && a.phase === "toolcall"
+                ? { ...a, bytes: (a.bytes ?? 0) + add }
+                : { phase: "toolcall", since: Date.now(), bytes: add },
+            );
+          } else if (ev.type === "done") finalizeAssistant();
           else if (ev.type === "error") {
             finalizeAssistant();
             pushToast(`model error: ${ev.reason ?? ""} ${ev.error ?? ""}`, "error");
@@ -216,6 +241,7 @@ export function useBridge() {
           const id = nextId();
           toolIds.current.set(String(p.toolCallId), id);
           setItems((prev) => [...prev, { id, role: "tool", text: "", toolName: p.toolName, toolStatus: "running", toolArgs: p.args }]);
+          setActivity({ phase: "tool", label: p.toolName ? String(p.toolName) : undefined, since: Date.now() });
           break;
         }
         case "tool_execution_end": {
@@ -223,6 +249,8 @@ export function useBridge() {
           const result = p.result ?? {};
           const resultText = Array.isArray(result.content) ? result.content.filter((c: any) => c?.type === "text").map((c: any) => c.text).join("") : undefined;
           if (id) setItems((prev) => prev.map((it) => (it.id === id ? { ...it, toolStatus: p.isError ? "error" : "ok", toolResult: resultText, toolDetails: result.details } : it)));
+          // Tool finished; the model resumes — back to a generic working phase until it emits.
+          setActivity((a) => (a ? { phase: "working", since: Date.now() } : a));
           break;
         }
       }
@@ -377,6 +405,7 @@ export function useBridge() {
   const resetSessionState = useCallback(() => {
     setItems([]);
     setStreaming(false);
+    setActivity(null);
     setStatuses({});
     setWidgets({ above: {}, below: {} });
     setDialog(null);
@@ -528,7 +557,7 @@ export function useBridge() {
   const closeLogin = useCallback(() => setLogin({ active: false }), []);
 
   return {
-    connection, hello, items, streaming, statuses, widgets, dialog, toasts, models, currentModel, thinkingLevel, setThinkingLevel, stderrLog, debugLog, login,
+    connection, hello, items, streaming, activity, statuses, widgets, dialog, toasts, models, currentModel, thinkingLevel, setThinkingLevel, stderrLog, debugLog, login,
     recentFolders, launcherFolder, launcherSessions, activeFolder, globalMode, startGlobal,
     artifacts, artifactsOpen, setArtifactsOpen, lastArtifactKey, commands,
     sessionTree, treeOpen, setTreeOpen, openSessionTree, rewindTo, rewinding, injectedText,

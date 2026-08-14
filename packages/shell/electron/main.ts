@@ -872,7 +872,9 @@ function handleLoginEvent(e: Record<string, any>) {
     void (async () => {
       await loginBridge?.stop();
       loginBridge = undefined;
-      if (lastAgent) await startSessionFor(lastAgent.workspace);
+      // Resume the session the user was in (not a fresh one) so the transcript stays put —
+      // same "recent" pattern as the reconnect/reload restarts. Login only refreshes creds.
+      if (lastAgent) await startSessionFor(lastAgent.workspace, "recent");
     })();
   }
   if (e.type === "login_error") {
