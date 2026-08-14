@@ -839,13 +839,15 @@ ipcMain.on("piwork:openExternal", (_e, url: string) => {
 // the session uses. pi-host drives Pi's ModelRuntime.login; we ferry its callbacks to
 // the renderer and open URLs in the user's real browser.
 //
-// Seamless callback (no manual URL paste): Pi's provider OAuth runs a loopback callback
-// server on a FIXED port (anthropic 53692, openai-codex 1455, radius 1456) and honors
-// PI_OAUTH_CALLBACK_HOST. We bind that server to 0.0.0.0 in the container and publish the
-// port to the host, so the browser's redirect to localhost:<port> reaches Pi's OWN callback
-// server — it completes the exchange and serves its own success page. Ephemeral-port
-// providers (openrouter) and any busy host port fall back to Pi's manual-paste prompt.
-const OAUTH_CALLBACK_PORTS = [53692, 1455, 1456];
+// Seamless callback (no manual URL paste): these providers run a loopback callback server
+// on a FIXED port (anthropic 53692, openai-codex 1455) AND honor PI_OAUTH_CALLBACK_HOST. We
+// bind that server to 0.0.0.0 in the container and publish the port to the host, so the
+// browser's redirect to localhost:<port> reaches Pi's OWN callback server — it completes the
+// exchange and serves its own success page. Excluded on purpose: radius (also fixed-port, but
+// hardcodes its callback host to 127.0.0.1, so publishing wouldn't reach it — and it offers
+// device-code anyway). Ephemeral-port providers (openrouter) and any busy host port fall back
+// to Pi's manual-paste prompt; device-code providers (copilot/kimi/xai) never needed a paste.
+const OAUTH_CALLBACK_PORTS = [53692, 1455];
 function portFree(port: number): Promise<boolean> {
   return new Promise((resolve) => {
     const net = require("node:net") as typeof import("node:net");
