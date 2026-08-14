@@ -5,7 +5,7 @@ import { useTheme } from "./useTheme.ts";
 import { useResources } from "./useResources.ts";
 import { useConnectors } from "./useConnectors.ts";
 import { FONT_OPTIONS, hasTweaks, PRESETS, resolveTheme, SIZE_MAX, SIZE_MIN, THEME_TOKENS } from "./theme.ts";
-import type { ChatItem, DirEntry, FileContent, LoginState, McpServer, McpStatusEntry, PackageItem, ResourceItem, ResourceList, SessionMeta, UiDialog } from "./types.ts";
+import type { Activity, ChatItem, DirEntry, FileContent, LoginState, McpServer, McpStatusEntry, PackageItem, ResourceItem, ResourceList, SessionMeta, UiDialog } from "./types.ts";
 // Rail icons — real artwork instead of emoji (Vite bundles + hashes these).
 import fileIcon from "./assets/rail/file.png";
 import extensionsIcon from "./assets/rail/extensions.png";
@@ -146,9 +146,9 @@ export default function App() {
               <button className="primary" onClick={() => void b.reconnect()}>⟳ Reconnect</button>
             </div>
           )}
-          <StatusBar statuses={b.statuses} streaming={b.streaming} onAbort={b.abort} />
+          <StatusBar statuses={b.statuses} streaming={b.streaming} activity={b.activity} onAbort={b.abort} />
           <Widgets lines={b.widgets.above} placement="above" />
-          <Chat items={b.items} connection={b.connection} globalMode={b.globalMode} />
+          <Chat items={b.items} connection={b.connection} globalMode={b.globalMode} streamingLabel={b.streaming ? activityLabel(b.activity) : undefined} />
           <Widgets lines={b.widgets.below} placement="below" />
           <Composer taRef={composerRef} streaming={b.streaming} disabled={b.connection !== "connected"} onSubmit={b.submit} commands={b.commands} injected={b.injectedText} canAttach={!b.globalMode && !!b.activeFolder} />
         </div>
@@ -771,14 +771,55 @@ function ScopeSwitch(props: { scope: "global" | "project"; projectFolder?: strin
   );
 }
 
-function StatusBar(props: { statuses: Record<string, string>; streaming: boolean; onAbort: () => void }) {
+// Human-readable label for the current agent phase. Tool names are trimmed to their last
+// segment (MCP tools look like "mcp__notion__create_page") and de-underscored so they read.
+function activityLabel(activity: Activity | null): string {
+  if (!activity) return "Working…";
+  switch (activity.phase) {
+    case "thinking": return "Thinking…";
+    case "responding": return "Responding…";
+    case "toolcall": return "Writing tool call…";
+    case "tool": {
+      const t = activity.label ? activity.label.split("__").pop()!.replace(/_/g, " ") : "";
+      return t ? `Running ${t}…` : "Running a tool…";
+    }
+    default: return "Working…";
+  }
+}
+
+// Rough human size for streamed tool-call arguments (delta chars ≈ bytes for JSON).
+function formatSize(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// Ticks once a second so an elapsed-in-phase timer stays live (independent of events — a
+// climbing number with no output is the "might be stuck" cue).
+function Elapsed({ since }: { since: number }) {
+  const [, force] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => force((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [since]);
+  const secs = Math.max(0, Math.floor((Date.now() - since) / 1000));
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return <span className="elapsed">{m}:{String(s).padStart(2, "0")}</span>;
+}
+
+function StatusBar(props: { statuses: Record<string, string>; streaming: boolean; activity: Activity | null; onAbort: () => void }) {
   const chips = Object.entries(props.statuses);
   if (chips.length === 0 && !props.streaming) return null;
   return (
     <div className="statusbar">
       {props.streaming && (
         <span className="chip chip-live">
-          <span className="dot" /> working…
+          <span className="dot" /> {activityLabel(props.activity)}
+          {props.activity?.phase === "toolcall" && props.activity.bytes ? (
+            <span className="elapsed">{formatSize(props.activity.bytes)} ·</span>
+          ) : null}
+          {props.activity && <Elapsed since={props.activity.since} />}
           <button className="link" onClick={props.onAbort}>abort</button>
         </span>
       )}
@@ -804,7 +845,7 @@ function Widgets(props: { lines: Record<string, string[]>; placement: string }) 
   );
 }
 
-function Chat(props: { items: ChatItem[]; connection: string; globalMode: boolean }) {
+function Chat(props: { items: ChatItem[]; connection: string; globalMode: boolean; streamingLabel?: string }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true);
@@ -849,7 +890,7 @@ function Chat(props: { items: ChatItem[]; connection: string; globalMode: boolea
   return (
     <div className="chat" ref={scrollRef} onScroll={onScroll}>
       {props.items.map((it) => (
-        <Message key={it.id} item={it} />
+        <Message key={it.id} item={it} streamingLabel={it.streaming ? props.streamingLabel : undefined} />
       ))}
       <div ref={endRef} />
     </div>
@@ -904,7 +945,7 @@ function DiffView({ patch }: { patch: string }) {
   );
 }
 
-function Message({ item }: { item: ChatItem }) {
+function Message({ item, streamingLabel }: { item: ChatItem; streamingLabel?: string }) {
   // Hooks must run unconditionally (before any early return).
   const bodyHtml = useMemo(() => (item.text ? (marked.parse(item.text) as string) : ""), [item.text]);
   const thinkingHtml = useMemo(() => (item.thinking ? (marked.parse(item.thinking) as string) : ""), [item.thinking]);
@@ -923,7 +964,7 @@ function Message({ item }: { item: ChatItem }) {
       {item.text ? (
         <div className="body" dangerouslySetInnerHTML={{ __html: bodyHtml }} />
       ) : item.streaming && !item.thinking ? (
-        <div className="body muted">…</div>
+        <div className="body muted">{streamingLabel ?? "…"}</div>
       ) : null}
     </div>
   );
