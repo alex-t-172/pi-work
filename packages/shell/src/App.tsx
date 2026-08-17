@@ -935,6 +935,25 @@ function ToolMessage({ item }: { item: ChatItem }) {
   );
 }
 
+// A user-run `!command` — a terminal block, distinct from an agent tool call. Output is shown
+// inline (not collapsed), since the user ran it to see it.
+function BashMessage({ item }: { item: ChatItem }) {
+  const command = String(item.toolArgs?.command ?? "");
+  const output = item.toolResult ?? "";
+  const running = item.toolStatus === "running";
+  const exitCode = (item.toolDetails as any)?.exitCode as number | undefined;
+  return (
+    <div className={`msg bash bash-${item.toolStatus}`}>
+      <div className="bash-cmd">
+        <span className="bash-prompt">$</span> <code>{command}</code>
+        {running && <span className="bash-running">running…</span>}
+      </div>
+      {!running && output.trim() && <pre className="bash-body">{output.slice(0, 20000)}</pre>}
+      {!running && item.toolStatus === "error" && exitCode != null && <div className="bash-exit">exited {exitCode}</div>}
+    </div>
+  );
+}
+
 function DiffView({ patch }: { patch: string }) {
   return (
     <pre className="tool-body diff">
@@ -951,7 +970,7 @@ function Message({ item, streamingLabel }: { item: ChatItem; streamingLabel?: st
   const bodyHtml = useMemo(() => (item.text ? (marked.parse(item.text) as string) : ""), [item.text]);
   const thinkingHtml = useMemo(() => (item.thinking ? (marked.parse(item.thinking) as string) : ""), [item.thinking]);
 
-  if (item.role === "tool") return <ToolMessage item={item} />;
+  if (item.role === "tool") return item.userBash ? <BashMessage item={item} /> : <ToolMessage item={item} />;
 
   return (
     <div className={`msg ${item.role} ${item.streaming ? "streaming" : ""}`}>
@@ -1104,7 +1123,7 @@ const Composer = (function () {
             value={text}
             rows={1}
             disabled={props.disabled}
-            placeholder={props.streaming ? "Enter = steer · Alt+Enter = follow-up · Shift+Enter = newline" : "Message Pi…  (/ for commands)"}
+            placeholder={props.streaming ? "Enter = steer · Alt+Enter = follow-up · Shift+Enter = newline" : "Message Pi…  (/ commands · ! shell)"}
             onChange={(e) => { setTextAndResize(e.target.value); setDismissed(false); setSel(0); }}
             onKeyDown={(e) => {
               if (open) {

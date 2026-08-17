@@ -179,6 +179,8 @@ export interface ChatItem {
   toolArgs?: Record<string, unknown>;
   toolResult?: string;
   toolDetails?: Record<string, unknown>;
+  /** A user-run `!command` (renders as a terminal block, not an agent tool call). */
+  userBash?: boolean;
   /** Assistant is still streaming. */
   streaming?: boolean;
 }

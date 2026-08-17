@@ -159,6 +159,14 @@ button.secondary { background: transparent; }
 .tool-body .dl.add { background: rgba(63,185,80,0.15); color: #7fe08a; }
 .tool-body .dl.del { background: rgba(248,81,73,0.15); color: #ffa198; }
 .tool-body .dl.hunk { color: var(--accent); }
+.msg.bash { display: flex; flex-direction: column; align-items: flex-start; align-self: flex-start; max-width: 100%; width: fit-content; }
+.bash-cmd { display: flex; align-items: baseline; gap: 6px; font: 12px/1.5 ui-monospace, Menlo, monospace; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 5px 10px; max-width: 100%; }
+.bash-prompt { color: var(--accent); font-weight: 600; }
+.bash-cmd code { color: var(--fg); white-space: pre-wrap; word-break: break-word; }
+.bash-running { color: var(--muted); font-size: 11px; }
+.bash-body { margin: 6px 0 0; max-width: 820px; max-height: 360px; overflow: auto; background: var(--code); padding: 10px; border-radius: 8px; font: 12px/1.5 ui-monospace, Menlo, monospace; white-space: pre-wrap; }
+.bash-error .bash-cmd { border-color: var(--error); }
+.bash-exit { color: var(--error); font-size: 11px; margin-top: 4px; }
 
 .composer { position: relative; flex: 0 0 auto; display: flex; gap: 8px; padding: 8px 10px; border-top: 1px solid var(--border); background: var(--bg2); align-items: flex-end; }
 /* Grab strip across the top edge — drag up to make the input taller. */
