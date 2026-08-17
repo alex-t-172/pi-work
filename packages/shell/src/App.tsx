@@ -142,7 +142,7 @@ export default function App() {
           />
           {b.dropped && b.connection !== "connected" && b.connection !== "starting" && (
             <div className="reconnect-banner">
-              <span>⚠ The sandbox stopped while the app was inactive — your conversation is saved.</span>
+              <span>⚠ The sandbox stopped while the app was inactive - your conversation is saved.</span>
               <button className="primary" onClick={() => void b.reconnect()}>⟳ Reconnect</button>
             </div>
           )}
@@ -264,7 +264,7 @@ function Launcher(props: {
       {!props.folder ? (
         <div className="launcher-body">
           <h2>Work locally, stay in control</h2>
-          <p className="muted">Choose a folder to sandbox the agent in, or start a global chat that can't touch your files.</p>
+          <p className="muted">Pick a folder for the agent to work in, or start a global chat with no file access.</p>
           <div className="folder-actions">
             <button className="primary" onClick={props.onPick}>Open a folder to work in…</button>
             <button className="cta-alt" onClick={props.onNewChat}>New chat</button>
@@ -542,7 +542,7 @@ function SessionTreePanel(props: { data: { tree: TreeNode[]; leaf: string | null
       <div className="tree-hint">
         {props.busy
           ? "Rewind is available when the agent is idle."
-          : "Jump back to any point — edit one of your messages, or continue after a reply."}
+          : "Jump back to any point - edit one of your messages, or continue after a reply."}
       </div>
       <div className="tree-body-wrap">
         <div className={`tree-body ${disabled ? "busy" : ""}`}>
@@ -622,7 +622,7 @@ function ArtifactsPane(props: {
       {srcDoc !== null ? (
         <iframe className="art-frame" title={title} sandbox="allow-scripts" srcDoc={srcDoc} />
       ) : (
-        <div className="muted" style={{ padding: 16 }}>Nothing to show yet. Open a file, or the agent can show an artifact here.</div>
+        <div className="muted" style={{ padding: 16 }}>Nothing to show yet. Open a file to view it here.</div>
       )}
     </div>
   );
@@ -762,7 +762,7 @@ function ScopeSwitch(props: { scope: "global" | "project"; projectFolder?: strin
       <button
         className={props.scope === "project" ? "active" : ""}
         disabled={!props.projectFolder}
-        title={props.projectFolder ? basename(props.projectFolder) : "No project context — open a folder first"}
+        title={props.projectFolder ? basename(props.projectFolder) : "No project context - open a folder first"}
         onClick={() => props.projectFolder && props.onProject(props.projectFolder)}
       >
         Project{props.projectFolder ? ` · ${basename(props.projectFolder)}` : ""}
@@ -878,7 +878,7 @@ function Chat(props: { items: ChatItem[]; connection: string; globalMode: boolea
         ) : props.globalMode ? (
           <div className="empty-global">
             <h3>Global chat</h3>
-            <p className="hint">Chat with your connectors and skills — no file access. Ask it to add global skills or tools.</p>
+            <p className="hint">A general agent chat with no file access. It can use your connectors and skills, and help customise Piwork itself.</p>
           </div>
         ) : (
           <div className="hint">Type a message to start.</div>
@@ -1181,7 +1181,7 @@ function ResourcesModal(props: { r: ReturnType<typeof useResources>; inSession: 
     <ModalShell
       className="resources-modal"
       title="Customise"
-      subtitle={isGlobal ? "Global — available in every project" : `${basename(r.workspace)} — this project only`}
+      subtitle={isGlobal ? "Global - available in every project" : `${basename(r.workspace)} - this project only`}
       headerExtra={r.dirty && props.inSession ? <button className="primary" onClick={r.reload}>Reload to apply</button> : undefined}
       onClose={props.onClose}
     >
@@ -1396,7 +1396,7 @@ function ConnectorsModal(props: { c: ReturnType<typeof useConnectors>; inSession
     <ModalShell
       className="connectors-modal"
       title="Connectors"
-      subtitle={isGlobal ? "Global — MCP servers available in every session" : `${basename(c.folder ?? "")} — this project only`}
+      subtitle={isGlobal ? "Global - MCP servers available in every session" : `${basename(c.folder ?? "")} - this project only`}
       headerExtra={c.dirty && props.inSession ? <button className="primary" onClick={c.reload}>Reload to apply</button> : undefined}
       onClose={props.onClose}
     >
@@ -1423,7 +1423,7 @@ function ConnectorsModal(props: { c: ReturnType<typeof useConnectors>; inSession
               </div>
             ))}
             <div className="res-row">
-              <div className="res-main"><span className="res-name">Custom…</span><span className="res-desc">Any MCP server — a remote URL or a local command</span></div>
+              <div className="res-main"><span className="res-name">Custom…</span><span className="res-desc">Any MCP server - a remote URL or a local command</span></div>
               <button onClick={() => setCustomOpen(true)}>Add</button>
             </div>
           </div>
@@ -1594,7 +1594,7 @@ function ModelAccountModal(props: {
         </>
       ) : (
         <>
-          <div className="modal-message">No model provider connected yet. Connect one above, or add an API-key provider:</div>
+          <div className="modal-message">No model connected. Sign in above, or add one by API key:</div>
           <AddProvider />
         </>
       )}

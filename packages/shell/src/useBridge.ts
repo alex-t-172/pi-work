@@ -358,7 +358,7 @@ export function useBridge() {
           setLogin((s) => ({ ...s, active: true, providers: p.providers, needProvider: !!p.needChoice, status: p.needChoice ? "Choose a provider" : "Authorizing…" }));
           break;
         case "login_open_url":
-          setLogin((s) => ({ ...s, status: "Opened your browser — complete sign-in there." }));
+          setLogin((s) => ({ ...s, status: "Opened your browser - complete sign-in there." }));
           break;
         case "login_device_code":
           setLogin((s) => ({ ...s, status: `Enter code ${p.userCode} at ${p.verificationUri}` }));
@@ -374,7 +374,7 @@ export function useBridge() {
           break;
         case "login_done":
           setLogin({ active: false, status: "Signed in" });
-          pushToast("Signed in ✓ — reconnecting session", "info");
+          pushToast("Signed in ✓ - reconnecting session", "info");
           break;
         case "login_error":
           setLogin((s) => ({ ...s, error: String(p.message ?? "login failed"), prompt: undefined }));
@@ -543,7 +543,7 @@ export function useBridge() {
     setLogin({ active: true, status: "Starting login…" });
     try {
       if (typeof window.piwork?.startLogin !== "function") {
-        throw new Error("Login isn't available in the running app — its main process is stale. Fully quit and restart `npm run dev`.");
+        throw new Error("Login isn't available in the running app - its main process is stale. Fully quit and restart `npm run dev`.");
       }
       const res = await window.piwork.startLogin();
       if (!res?.ok) setLogin({ active: true, error: res?.error ?? "Failed to start login." });
