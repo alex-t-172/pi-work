@@ -10,6 +10,8 @@
     "node": ">=22.18"
   },
   "scripts": {
-    "spike:a": "node scripts/spike-a.mjs"
+    "dev": "npm --prefix packages/shell run dev",
+    "image": "docker build -t piwork-sandbox:spike -f images/Dockerfile .",
+    "verify:pi": "npm --prefix packages/pi-host run verify:pi"
   }
 }

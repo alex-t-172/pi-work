@@ -72,15 +72,18 @@ packages/
   bridge-protocol/   shared JSONL framing + protocol types + guards (unit-tested)
   pi-host/           embeds the Pi SDK; container-side bridge + base extension + baked skills
   shell/             Electron app — electron/ (main, preload, ContainerBridge) + src/ (React)
-  piwork-artifacts/  Suite: auto-preview files written to .artifacts/
-  piwork-ask/        Suite: agent asks you a question (choice / free text) mid-turn
-  piwork-checkpoint/ Suite: git auto-checkpoint before each turn
-  piwork-renderers/  Suite: extra viewer renderers (CSV → table) — the file→artifact contract
-  piwork-tasks/      Suite: a task list the agent maintains, docked + persisted
-  piwork-ui/         helper lib for extensions to emit Piwork UI intents
-images/Dockerfile    node:24 + git + ripgrep + pi-host + pinned Pi SDK + pi-mcp-adapter + skills
+  piwork-ask/        built-in: agent asks you a question (choice / free text) mid-turn
+  piwork-artifacts/  built-in: show_artifact tool — present a file / rich HTML in the viewer
+  piwork-tasks/      built-in: a task list the agent maintains, docked + persisted
+examples/
+  extensions/        reference extensions (not installed) — e.g. piwork-checkpoint
+images/Dockerfile    node:24 + git + ripgrep + pi-host + pinned Pi SDK + pi-mcp-adapter
+                     + baked built-in extensions + skills
 docs/                living roadmap
 ```
+
+The three `piwork-*` packages are Piwork's **built-in extensions** — baked into the image and
+default-installed into a fresh agent store, but removable per project/globally in Customise.
 
 ## Prerequisites
 
@@ -136,7 +139,7 @@ installed.
   those subtrees, so credentials stay unreachable.
 - **New viewer file types:** an extension registers a `render(file) → { html | markdown }`
   transform via `globalThis.__piwork.registerFileRenderer`; the sandboxed viewer renders the
-  result. `piwork-renderers` (CSV → table) is the worked example.
+  result.
 
 ## MCP connectors
 
