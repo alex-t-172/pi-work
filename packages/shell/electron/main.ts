@@ -186,8 +186,31 @@ function createWindow() {
       sandbox: true,
     },
   });
+  hardenNavigation(win.webContents);
   if (DEV_URL) win.loadURL(DEV_URL);
   else win.loadFile(path.join(dir, "..", "renderer", "index.html"));
+}
+
+// Keep the renderer an app, not a browser: a link in chat/markdown must open in the user's
+// real browser, never navigate the Electron window away from the app (which would replace the
+// whole UI with the page). Route external http(s) navigations + window.open to shell.openExternal.
+function hardenNavigation(wc: import("electron").WebContents): void {
+  const isExternal = (url: string): boolean => {
+    try {
+      const u = new URL(url);
+      if (u.protocol !== "http:" && u.protocol !== "https:") return false;
+      // The app is served from DEV_URL (dev) or file:// (prod). Anything off that origin is external.
+      if (DEV_URL) { try { return new URL(DEV_URL).origin !== u.origin; } catch { return true; } }
+      return true; // prod app is file://, so any http(s) navigation is external
+    } catch { return false; }
+  };
+  wc.on("will-navigate", (e, url) => {
+    if (isExternal(url)) { e.preventDefault(); void shell.openExternal(url); }
+  });
+  wc.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
+    return { action: "deny" }; // the renderer never spawns its own windows
+  });
 }
 
 function forward(channel: string, payload: unknown) {
