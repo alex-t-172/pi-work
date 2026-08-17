@@ -49,13 +49,19 @@ built-in extensions.
 
 ```bash
 npm run typecheck      # tsc across the shell
+npm run lint           # eslint (0 errors required; a couple of hook-deps warnings are OK)
 npm test               # bridge-protocol framing unit tests
-npm run image && npm run verify:pi   # rebuild + assert pi-host still binds to the pinned Pi SDK
+npm run image          # build the sandbox image (RUNs verify-pi as a gate)
+npm run verify:builtins # every default built-in loads from the image + registers its tools
 ```
 
-`verify:pi` is the contract gate — it also runs inside `docker build`, so a broken Pi binding
-fails the image build rather than surfacing at runtime. See
+CI runs all of these on every PR (`.github/workflows/ci.yml`). Two gates worth calling out:
+`verify:pi` (inside `docker build`) asserts pi-host still binds to the pinned Pi SDK, and
+`verify:builtins` asserts the built-in extensions still load. See
 [`packages/pi-host/UPGRADING-PI.md`](packages/pi-host/UPGRADING-PI.md) for upgrading the Pi SDK.
+
+A Prettier config exists (`npm run format`), but the codebase hasn't been reformatted yet, so
+formatting isn't enforced in CI — match the surrounding style for now.
 
 ## Writing an extension
 
@@ -68,7 +74,6 @@ a `package.json` with `"pi": { "extensions": ["./extensions"] }` and one or more
 ## PR conventions
 
 - Keep PRs small and focused; describe the *why*, not just the *what*.
-- Match the surrounding code style (no separate formatter config yet).
 - Make sure the checks above pass locally. CI runs them too.
 
 ## Reporting bugs / ideas

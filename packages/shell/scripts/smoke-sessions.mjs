@@ -54,7 +54,7 @@ function listSessions(ws) {
     p.stdout.on("data", (c) => (out += c));
     p.on("exit", () => {
       const line = out.split("\n").find((l) => l.includes("piwork_sessions"));
-      try { resolve(JSON.parse(line).sessions); } catch (e) { reject(new Error("no session list: " + out.slice(0, 200))); }
+      try { resolve(JSON.parse(line).sessions); } catch { reject(new Error("no session list: " + out.slice(0, 200))); }
     });
   });
 }

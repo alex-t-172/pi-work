@@ -8,7 +8,8 @@
     "pi-host": "./src/index.ts"
   },
   "scripts": {
-    "verify:pi": "sh scripts/verify-pi.sh"
+    "verify:pi": "sh scripts/verify-pi.sh",
+    "verify:builtins": "sh scripts/verify-builtins.sh"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "0.84.0"
