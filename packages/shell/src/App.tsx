@@ -5,7 +5,7 @@ import { useTheme } from "./useTheme.ts";
 import { useResources } from "./useResources.ts";
 import { useConnectors } from "./useConnectors.ts";
 import { FONT_OPTIONS, hasTweaks, PRESETS, resolveTheme, SIZE_MAX, SIZE_MIN, THEME_TOKENS } from "./theme.ts";
-import type { Activity, ChatItem, DirEntry, FileContent, LoginState, McpServer, McpStatusEntry, PackageItem, ResourceItem, ResourceList, SessionMeta, UiDialog } from "./types.ts";
+import type { Activity, ChatItem, DirEntry, FileContent, LoginState, McpServer, McpStatusEntry, ResourceItem, ResourceList, SessionMeta, TreeNode, UiDialog } from "./types.ts";
 // Rail icons — real artwork instead of emoji (Vite bundles + hashes these).
 import fileIcon from "./assets/rail/file.png";
 import extensionsIcon from "./assets/rail/extensions.png";
@@ -900,7 +900,7 @@ function Chat(props: { items: ChatItem[]; connection: string; globalMode: boolea
 // Rich tool rendering (the "renderers" capability — shell-side, since Pi's TUI
 // renderCall/renderResult can't serialize). Summarizes args in the header and shows a
 // collapsible body (unified diff for edits, output for bash/others).
-function toolSummary(name?: string, args?: Record<string, unknown>): string {
+function toolSummary(_name?: string, args?: Record<string, unknown>): string {
   if (!args) return "";
   const a = args as Record<string, any>;
   if (a.command) return String(a.command).split("\n")[0].slice(0, 120);

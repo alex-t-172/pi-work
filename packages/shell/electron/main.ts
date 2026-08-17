@@ -816,7 +816,7 @@ ipcMain.handle("piwork:mcpLogout", async (_e, server: string, scope: "global" | 
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
 });
-ipcMain.handle("piwork:mcpRefreshStatus", (_e, scope: "global" | "project", folder?: string) => {
+ipcMain.handle("piwork:mcpRefreshStatus", (_e, _scope: "global" | "project", _folder?: string) => {
   // Prefer the active chat session's adapter if present (free); else the auth container if
   // one is already up. Don't spin a container just to poll status.
   if (bridge) { bridge.send({ type: "prompt", message: "/piwork-mcp-status" }); return { ok: true }; }
