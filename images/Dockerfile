@@ -41,6 +41,15 @@ COPY packages/pi-host/skills ./skills
 # The Pi-SDK contract harness (also runnable at dev time via scripts/verify-pi.sh).
 COPY packages/pi-host/scripts ./scripts
 
+# Piwork's built-in extensions (the Suite), baked at /opt/piwork-suite so a fresh install has
+# them with no repo mount. They're DEFAULT-INSTALLED via the store's settings.json (seeded by
+# the shell on first run) and fully removable in Customise — baking is delivery, not activation.
+# In dev the shell mounts the repo's packages/ over this path (DEV_SUITE_DIR) for live editing.
+# Each is a single .ts file with type-only imports, so no dependency install is needed.
+COPY packages/piwork-ask       /opt/piwork-suite/piwork-ask
+COPY packages/piwork-artifacts /opt/piwork-suite/piwork-artifacts
+COPY packages/piwork-tasks     /opt/piwork-suite/piwork-tasks
+
 # BUILD-TIME GATE: assert pi-host still binds to the pinned Pi SDK (all imports resolve,
 # extensions load with zero errors, ModelRuntime/OAuth surface intact, system-prompt hook
 # works). Runs offline as root. If a Pi upgrade breaks the binding, the IMAGE FAILS TO BUILD

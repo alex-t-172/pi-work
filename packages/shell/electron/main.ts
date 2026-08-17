@@ -86,7 +86,7 @@ const DEV_ADD_HOST_GATEWAY = process.env.PIWORK_ADD_HOST_GATEWAY === "1" || IS_D
 // Host path to the monorepo `packages/` dir, mounted at /opt/piwork-suite so Suite
 // extensions installed by local path (pi install /opt/piwork-suite/<pkg>) resolve.
 const DEV_SUITE_DIR = cleanPath(process.env.PIWORK_SUITE_DIR)
-  ?? (IS_DEV && fs.existsSync(path.join(DEV_SUITE_GUESS, "piwork-checkpoint")) ? DEV_SUITE_GUESS : undefined);
+  ?? (IS_DEV && fs.existsSync(path.join(DEV_SUITE_GUESS, "piwork-ask")) ? DEV_SUITE_GUESS : undefined);
 // Mount the suite AND the repo's root node_modules (at /opt/node_modules) so mounted
 // suite packages resolve hoisted deps (e.g. the MCP SDK) — resolution walks up from
 // /opt/piwork-suite/<pkg> to /opt/node_modules. (Prod installs deps via pi install.)
@@ -218,6 +218,7 @@ async function startSessionFor(workspace: string, session?: string, opts?: { glo
     bridge = new ContainerBridge();
     wireBridge(bridge);
     const mount = agentMount();
+    ensureStoreProvisioned(mount); // first-run: seed the built-in Suite into a fresh store
     lastAgent = { workspace, ...mount };
     if (!opts?.global) addRecent(workspace); // global chat isn't a folder
     log(`starting ${opts?.global ? "GLOBAL " : ""}session: workspace=${workspace} session=${session ?? "new"} agentDir=${mount.agentHostDir ?? mount.agentVolume} suite=${DEV_SUITE_DIR ?? "(none)"}`);
@@ -363,6 +364,32 @@ function writeAgentText(mount: { agentHostDir?: string; agentVolume?: string }, 
 }
 function readModelsJson(mount: { agentHostDir?: string; agentVolume?: string }): Record<string, any> {
   try { return JSON.parse(readAgentText(mount, "models.json") || "{}"); } catch { return {}; }
+}
+
+// Piwork's built-in extensions, baked at /opt/piwork-suite in the image (and dev-mounted there
+// in dev). Referenced by a path relative to the agent store (/root/.pi/agent → ../../../opt),
+// so the SAME entry resolves in dev and prod. They're default-installed but fully removable in
+// Customise — baking is just delivery, not activation.
+const DEFAULT_SUITE_PACKAGES = [
+  "../../../opt/piwork-suite/piwork-ask",
+  "../../../opt/piwork-suite/piwork-artifacts",
+  "../../../opt/piwork-suite/piwork-tasks",
+];
+let storeProvisioned = false;
+// Seed a FRESH agent store so a first run has Piwork's built-in features with zero manual setup.
+// Only writes when there's no settings.json yet — never clobbers an existing/user-edited store
+// (so removing a default in Customise sticks). Runs once per app launch.
+function ensureStoreProvisioned(mount: { agentHostDir?: string; agentVolume?: string }): void {
+  if (storeProvisioned) return;
+  try {
+    if (!readAgentText(mount, "settings.json").trim()) {
+      const w = writeAgentText(mount, "settings.json", JSON.stringify({ packages: DEFAULT_SUITE_PACKAGES }, null, 2));
+      log(w.ok ? "provisioned fresh agent store with the built-in Suite" : `store provisioning failed: ${w.error}`);
+    }
+    storeProvisioned = true;
+  } catch (e) {
+    log(`store provisioning error: ${String(e)}`); // leave unprovisioned → retry next session
+  }
 }
 function writeModelsJson(mount: { agentHostDir?: string; agentVolume?: string }, json: Record<string, any>): { ok: boolean; error?: string } {
   return writeAgentText(mount, "models.json", JSON.stringify(json, null, 2));
