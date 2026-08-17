@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  checks:
+    name: Checks (typecheck · lint · test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install --no-audit --no-fund
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Unit tests
+        run: npm test
+
+  image:
+    name: Image contract (verify-pi · built-ins)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The image build RUNs verify-pi as a gate — a broken Pi binding fails the build here.
+      - name: Build sandbox image
+        run: docker build -t piwork-sandbox:spike -f images/Dockerfile .
+      # Every default built-in loads from the baked image with zero errors + its tools registered.
+      - name: Built-ins load check
+        run: sh packages/pi-host/scripts/verify-builtins.sh

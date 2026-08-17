@@ -16,6 +16,8 @@ import * as path from "node:path";
 import * as os from "node:os";
 import * as fs from "node:fs";
 import { ContainerBridge } from "./container.ts";
+// The built-in extensions manifest — single source shared with the built-ins-load test.
+import BUILT_INS from "../../pi-host/built-ins.json";
 
 const DOCKER = process.env.PIWORK_DOCKER || "docker";
 
@@ -389,16 +391,12 @@ function readModelsJson(mount: { agentHostDir?: string; agentVolume?: string }):
   try { return JSON.parse(readAgentText(mount, "models.json") || "{}"); } catch { return {}; }
 }
 
-// Piwork's built-in extensions, baked at /opt/piwork-suite in the image (and dev-mounted there
-// in dev). Referenced by a path relative to the agent store (/root/.pi/agent → ../../../opt),
-// so the SAME entry resolves in dev and prod. They're default-installed but fully removable in
-// Customise — baking is just delivery, not activation.
-const DEFAULT_SUITE_PACKAGES = [
-  "../../../opt/piwork-suite/piwork-ask",
-  "../../../opt/piwork-suite/piwork-artifacts",
-  "../../../opt/piwork-suite/piwork-tasks",
-  "../../../opt/pi-subagents", // Pi ecosystem subagent/delegation extension (baked outside the suite mount)
-];
+// Piwork's built-in extensions, baked into the image and referenced by a path relative to the
+// agent store (/root/.pi/agent → ../../../opt), so the SAME entry resolves in dev and prod.
+// Default-installed but fully removable in Customise — baking is delivery, not activation.
+// Single-sourced from built-ins.json (the manifest the built-ins-load test also checks), so the
+// list lives in ONE place. Adding a built-in = one entry there + a Dockerfile bake step.
+const DEFAULT_SUITE_PACKAGES = BUILT_INS.map((b) => b.source);
 let storeProvisioned = false;
 // Seed a FRESH agent store so a first run has Piwork's built-in features with zero manual setup.
 // Only writes when there's no settings.json yet — never clobbers an existing/user-edited store
@@ -560,7 +558,7 @@ function ensureAttachExcluded(workspace: string): void {
     // Only for git repos; find the exact exclude file (robust to worktrees/submodules).
     const inside = spawnSyncGit(workspace, ["rev-parse", "--is-inside-work-tree"]);
     if (inside.trim() !== "true") return;
-    let excludeRel = spawnSyncGit(workspace, ["rev-parse", "--git-path", "info/exclude"]).trim();
+    const excludeRel = spawnSyncGit(workspace, ["rev-parse", "--git-path", "info/exclude"]).trim();
     if (!excludeRel) return;
     const excludePath = path.isAbsolute(excludeRel) ? excludeRel : path.join(workspace, excludeRel);
     let cur = "";

@@ -14,9 +14,24 @@
     "image": "docker build -t piwork-sandbox:spike -f images/Dockerfile .",
     "typecheck": "npm --prefix packages/shell run typecheck",
     "test": "node --test packages/bridge-protocol/src/*.test.ts",
-    "verify:pi": "npm --prefix packages/pi-host run verify:pi"
+    "verify:pi": "npm --prefix packages/pi-host run verify:pi",
+    "verify:builtins": "npm --prefix packages/pi-host run verify:builtins",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "license": "MIT",
   "author": "Alex Thoma",
-  "repository": { "type": "git", "url": "https://github.com/alext-tessl/pi-work" }
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alext-tessl/pi-work"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.8.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.11.0",
+    "prettier": "^3.9.6",
+    "typescript-eslint": "^8.67.0"
+  }
 }

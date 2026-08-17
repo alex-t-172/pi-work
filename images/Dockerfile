@@ -51,6 +51,8 @@ COPY packages/pi-host/src ./src
 COPY packages/pi-host/skills ./skills
 # The Pi-SDK contract harness (also runnable at dev time via scripts/verify-pi.sh).
 COPY packages/pi-host/scripts ./scripts
+# Built-in extensions manifest (single source shared with the shell + the built-ins-load test).
+COPY packages/pi-host/built-ins.json ./built-ins.json
 
 # Piwork's built-in extensions (the Suite), baked at /opt/piwork-suite so a fresh install has
 # them with no repo mount. They're DEFAULT-INSTALLED via the store's settings.json (seeded by
