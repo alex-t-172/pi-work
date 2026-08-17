@@ -374,6 +374,7 @@ const DEFAULT_SUITE_PACKAGES = [
   "../../../opt/piwork-suite/piwork-ask",
   "../../../opt/piwork-suite/piwork-artifacts",
   "../../../opt/piwork-suite/piwork-tasks",
+  "../../../opt/pi-subagents", // Pi ecosystem subagent/delegation extension (baked outside the suite mount)
 ];
 let storeProvisioned = false;
 // Seed a FRESH agent store so a first run has Piwork's built-in features with zero manual setup.

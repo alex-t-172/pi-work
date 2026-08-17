@@ -34,6 +34,17 @@ RUN mkdir -p /opt/pi-mcp-adapter && cd /opt/pi-mcp-adapter \
   && rm pi-mcp-adapter-*.tgz \
   && npm install --omit=dev --no-audit --no-fund
 
+# Bake pi-subagents (the Pi ecosystem's subagent/delegation extension) as a built-in. Unlike our
+# single-file built-ins it's an npm package with deps, so pack + install them beside it (like the
+# adapter); Pi's extension loader aliases its @earendil-works/* + typebox peers to the host copies
+# at load time. Baked OUTSIDE /opt/piwork-suite so the dev suite-mount doesn't shadow it (it's not
+# a repo package). Default-installed via the seeded settings.json; removable in Customise.
+RUN mkdir -p /opt/pi-subagents && cd /opt/pi-subagents \
+  && npm pack pi-subagents@0.49.0 --silent \
+  && tar -xzf pi-subagents-*.tgz --strip-components=1 \
+  && rm pi-subagents-*.tgz \
+  && npm install --omit=dev --no-audit --no-fund
+
 # pi-host source (run directly via Node 24 native TypeScript type-stripping).
 COPY packages/pi-host/src ./src
 # Baked-in Piwork skills (always available: the "how to write an extension" guide).
