@@ -68,6 +68,7 @@ export function useBridge() {
   const nextId = () => `it-${++idc.current}`;
   const assistantId = useRef<string | null>(null);
   const toolIds = useRef<Map<string, string>>(new Map());
+  const bashIds = useRef<Map<string, string>>(new Map()); // bash command id → chat item id
   const rewindInFlight = useRef(false); // a rewind was requested, awaiting the fresh tree (= success)
   const pendingPrefill = useRef<string | null>(null);
   const streamingRef = useRef(false);
@@ -173,6 +174,17 @@ export function useBridge() {
             setStreaming(Boolean(p.data?.isStreaming));
             // On reconnect mid-stream we don't know the phase; show a generic working state.
             setActivity((a) => (p.data?.isStreaming ? a ?? { phase: "working", since: Date.now() } : null));
+          } else if (p.command === "bash") {
+            // Result of a user-run `!command`: fill in its item (output + exit).
+            const itemId = bashIds.current.get(String(p.id));
+            if (itemId) {
+              bashIds.current.delete(String(p.id));
+              const r = (p.data ?? {}) as { output?: string; exitCode?: number; cancelled?: boolean; truncated?: boolean };
+              const ok = Boolean(p.success) && !r.cancelled && (r.exitCode === 0 || r.exitCode == null);
+              setItems((prev) => prev.map((it) => (it.id === itemId
+                ? { ...it, toolStatus: ok ? "ok" : "error", toolResult: p.success ? (r.output ?? "") : String(p.error ?? "bash failed"), toolDetails: { exitCode: r.exitCode, cancelled: r.cancelled, truncated: r.truncated } }
+                : it)));
+            }
           } else if (p.success === false) {
             pushToast(`${p.command} failed: ${p.error ?? "error"}`, "error");
           }
@@ -479,8 +491,24 @@ export function useBridge() {
     else backToFolders();
   }, [activeFolder, endSession, selectFolder, backToFolders]);
 
+  // Run a `!command` in the sandbox (Pi's RPC bash) and show it as a terminal item in chat.
+  // Output is included in the agent's context (like a terminal `!`), so the agent sees it too.
+  const runBash = useCallback((command: string) => {
+    const itemId = nextId();
+    const cmdId = `bash-${itemId}`;
+    bashIds.current.set(cmdId, itemId);
+    setItems((prev) => [...prev, { id: itemId, role: "tool", userBash: true, text: "", toolName: "bash", toolStatus: "running", toolArgs: { command } }]);
+    window.piwork.send({ id: cmdId, type: "bash", command });
+  }, []);
+
   const submit = useCallback(
     async (text: string, mode: "auto" | "steer" | "followUp", attachments?: string[]) => {
+      // `!command` → run bash in the sandbox instead of prompting the agent (like a terminal).
+      const trimmed = text.trim();
+      if (trimmed.startsWith("!") && trimmed.slice(1).trim()) {
+        runBash(trimmed.slice(1).trim());
+        return;
+      }
       // Attachments: copy the picked host files into the workspace's .attachments/ (host-side,
       // git-excluded), then reference their workspace paths in the prompt so the agent reads them.
       let finalText = text;
@@ -504,7 +532,7 @@ export function useBridge() {
         window.piwork.send({ id: "follow_up", type: "follow_up", message: finalText });
       }
     },
-    [streaming, activeFolder, pushToast],
+    [streaming, activeFolder, pushToast, runBash],
   );
 
   const openSessionTree = useCallback(() => window.piwork.send({ id: "tree", type: "prompt", message: "/piwork-tree" }), []);
