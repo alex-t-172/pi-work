@@ -28,6 +28,7 @@ const SUITE_PRESETS = [
 // Add, then Connect and authorize in the browser (no tokens to paste). Powered by the baked
 // pi-mcp-adapter, which handles the OAuth (incl. dynamic client registration) + token refresh.
 const MCP_PRESETS: Array<{ name: string; label: string; url: string; desc: string }> = [
+  { name: "slack", label: "Slack", url: "https://mcp.slack.com/mcp", desc: "Messages, search & canvases (needs workspace-admin approval)" },
   { name: "notion", label: "Notion", url: "https://mcp.notion.com/mcp", desc: "Search & edit your Notion workspace" },
   { name: "linear", label: "Linear", url: "https://mcp.linear.app/mcp", desc: "Issues, projects & cycles" },
   { name: "sentry", label: "Sentry", url: "https://mcp.sentry.dev/mcp", desc: "Errors, issues & traces" },
