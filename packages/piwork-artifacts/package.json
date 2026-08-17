@@ -1,7 +1,7 @@
 {
   "name": "piwork-artifacts",
   "version": "0.0.0",
-  "description": "Piwork Suite: auto-preview files the agent writes to .artifacts/ (HTML/Markdown/text) in the artifacts panel.",
+  "description": "Piwork built-in: a show_artifact tool the agent calls to present a file or rich HTML/Markdown in the viewer panel.",
   "keywords": ["pi-package", "piwork"],
   "pi": {
     "extensions": ["./extensions"]

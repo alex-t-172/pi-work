@@ -34,12 +34,32 @@ RUN mkdir -p /opt/pi-mcp-adapter && cd /opt/pi-mcp-adapter \
   && rm pi-mcp-adapter-*.tgz \
   && npm install --omit=dev --no-audit --no-fund
 
+# Bake pi-subagents (the Pi ecosystem's subagent/delegation extension) as a built-in. Unlike our
+# single-file built-ins it's an npm package with deps, so pack + install them beside it (like the
+# adapter); Pi's extension loader aliases its @earendil-works/* + typebox peers to the host copies
+# at load time. Baked OUTSIDE /opt/piwork-suite so the dev suite-mount doesn't shadow it (it's not
+# a repo package). Default-installed via the seeded settings.json; removable in Customise.
+RUN mkdir -p /opt/pi-subagents && cd /opt/pi-subagents \
+  && npm pack pi-subagents@0.49.0 --silent \
+  && tar -xzf pi-subagents-*.tgz --strip-components=1 \
+  && rm pi-subagents-*.tgz \
+  && npm install --omit=dev --no-audit --no-fund
+
 # pi-host source (run directly via Node 24 native TypeScript type-stripping).
 COPY packages/pi-host/src ./src
 # Baked-in Piwork skills (always available: the "how to write an extension" guide).
 COPY packages/pi-host/skills ./skills
 # The Pi-SDK contract harness (also runnable at dev time via scripts/verify-pi.sh).
 COPY packages/pi-host/scripts ./scripts
+
+# Piwork's built-in extensions (the Suite), baked at /opt/piwork-suite so a fresh install has
+# them with no repo mount. They're DEFAULT-INSTALLED via the store's settings.json (seeded by
+# the shell on first run) and fully removable in Customise — baking is delivery, not activation.
+# In dev the shell mounts the repo's packages/ over this path (DEV_SUITE_DIR) for live editing.
+# Each is a single .ts file with type-only imports, so no dependency install is needed.
+COPY packages/piwork-ask       /opt/piwork-suite/piwork-ask
+COPY packages/piwork-artifacts /opt/piwork-suite/piwork-artifacts
+COPY packages/piwork-tasks     /opt/piwork-suite/piwork-tasks
 
 # BUILD-TIME GATE: assert pi-host still binds to the pinned Pi SDK (all imports resolve,
 # extensions load with zero errors, ModelRuntime/OAuth surface intact, system-prompt hook
