@@ -689,6 +689,9 @@ function mcpMountArgs(): string[] {
 interface McpServer {
   name: string; label?: string; url?: string; auth?: "oauth" | "bearer";
   command?: string; args?: string[]; headers?: Record<string, string>; env?: Record<string, string>;
+  // For OAuth servers that require a PRE-REGISTERED app (no dynamic client registration, e.g.
+  // Slack): the client credentials from the app you registered. clientSecret is a secret.
+  oauthClientId?: string; oauthClientSecret?: string;
 }
 function mcpConfigPath(scope: "global" | "project", folder?: string): string {
   if (scope === "project" && folder) return path.join(folder, ".pi", "mcp.json");
@@ -700,6 +703,7 @@ function readMcpServers(scope: "global" | "project", folder?: string): { servers
     const map = raw.mcpServers ?? {};
     const servers: McpServer[] = Object.entries<any>(map).map(([name, def]) => ({
       name, label: def.label, url: def.url, auth: def.auth, command: def.command, args: def.args, headers: def.headers, env: def.env,
+      oauthClientId: def.oauth?.clientId, oauthClientSecret: def.oauth?.clientSecret,
     }));
     return { servers };
   } catch { return { servers: [] }; }
@@ -715,8 +719,16 @@ function writeMcpServers(scope: "global" | "project", folder: string | undefined
     if (s.headers && Object.keys(s.headers).length) entry.headers = s.headers;
     if (s.env && Object.keys(s.env).length) entry.env = s.env;
     if (s.auth) entry.auth = s.auth;
-    // Pin the redirect to our host callback port so browser OAuth returns seamlessly.
-    if (s.auth === "oauth") entry.oauth = { redirectUri: MCP_REDIRECT_URI };
+    // Pin the redirect to our host callback port so browser OAuth returns seamlessly. For servers
+    // that require a pre-registered app (no dynamic client registration), also pass the app's
+    // client credentials so the adapter skips registration.
+    if (s.auth === "oauth") {
+      entry.oauth = {
+        redirectUri: MCP_REDIRECT_URI,
+        ...(s.oauthClientId ? { clientId: s.oauthClientId } : {}),
+        ...(s.oauthClientSecret ? { clientSecret: s.oauthClientSecret } : {}),
+      };
+    }
     mcpServers[s.name] = entry;
   }
   const file = mcpConfigPath(scope, folder);
@@ -731,7 +743,7 @@ ipcMain.handle("piwork:setMcpServers", (_e, scope: "global" | "project", folder:
   // config (~/.piwork/mcp-global, host-side, never in a repo). OAuth/plain-URL are fine:
   // their secrets live in the container's token store, not the file.
   if (scope === "project") {
-    const leaky = servers.find((s) => (s.env && Object.keys(s.env).length > 0) || (s.headers && Object.keys(s.headers).length > 0));
+    const leaky = servers.find((s) => (s.env && Object.keys(s.env).length > 0) || (s.headers && Object.keys(s.headers).length > 0) || s.oauthClientSecret);
     if (leaky) {
       return { ok: false, error: `“${leaky.label ?? leaky.name}” has a secret, so it can't be a project connector — it would be committed to this repo's .pi/mcp.json. Add it as a Global connector instead.` };
     }
