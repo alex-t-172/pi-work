@@ -1,58 +1,94 @@
 # Piwork
 
-A GUI desktop shell for the [Pi coding agent](https://pi.dev), plus a removable **Suite**
-of extensions that deliver Cowork-like features on top. Piwork is to Cowork what Pi is to
-Claude Code: the core shell stays minimal; features are Pi extensions expressed through a
-UI-intent contract, and you can install — or **author from inside the app** — more.
+[![CI](https://github.com/alext-tessl/pi-work/actions/workflows/ci.yml/badge.svg)](https://github.com/alext-tessl/pi-work/actions/workflows/ci.yml)
 
-It's aimed at technical-but-non-developer users: work with a coding agent in a sandbox,
-view the files it produces, connect your tools, and customise the app as you go — without
-touching a terminal.
+Piwork is a desktop app for the [Pi coding agent](https://pi.dev). You open a folder and an
+agent works inside it, in a sandbox: it can read and change files in that folder, but nothing
+else on your machine. You chat with it, watch what it does, view the files it writes, and
+connect tools like Slack or Notion. It all happens in a window, not a terminal.
 
-See [`pi-cowork-design.md`](./pi-cowork-design.md) for the original design and rationale.
+Most of Piwork's features are Pi extensions rather than app code, so you can add more, or ask
+the agent to write one for you. (If you know Claude's tools: Piwork is to Cowork roughly what Pi
+is to Claude Code.)
+
+> **Status:** early, and built entirely with an AI coding agent. Right now it runs as a dev
+> build: clone the repo, build the sandbox image, and run the app. A packaged, downloadable
+> version comes later. macOS first.
 
 ## What it does
 
-- **Sandboxed sessions per folder.** Open a folder → a container starts with that folder
-  bind-mounted at `/workspace`; the agent works only there. The container is the trust
-  boundary. Streaming chat with steer / follow-up / abort, rich tool rendering, and a
-  visual **Rewind** (branch the conversation back to any earlier message).
-- **Global chat.** A folderless assistant from the home screen — chat + your connectors &
-  skills, with **no file access** (enforced by having no folder mounted, not by tool hacks).
-- **Host-side file browser + document viewer.** Browse folders to pick where to start
-  (before any container exists) and, in-session, read the workspace. Click a file to view
-  it (text · markdown · images · HTML) in a resizable pane. **Read-only** — the agent makes
-  changes, you view results.
-- **Model providers via OAuth.** Connect Anthropic (or others) from within the app; the
-  browser OAuth handshake is relayed out of the container.
-- **MCP connectors.** Connect hosted services (Notion, Linear, Sentry, Stripe, …) with a
-  **seamless OAuth "Connect" button**, or add any custom MCP server (remote URL or local
-  stdio + token). Powered by the baked [`pi-mcp-adapter`](https://pi.dev/packages/pi-mcp-adapter).
-- **Resource manager.** Install / remove skills, plugins and extensions from the UI, at
-  **global** (every project) or **project** scope — managed like a CLI agent's dot-folders.
-- **Self-extension.** Ask Piwork to write a new skill or extension — a `/command`, a tool,
-  a UI panel, or even a new file-type renderer — and reload it live, at project or global
-  scope. Customise the app in the course of doing work with it.
-- **Themes** you can change from the UI, and a **checkpoint** safety net (git auto-commit
-  before each turn) among the Suite packages.
+- **Sandboxed sessions per folder.** Open a folder and Piwork starts a container with that
+  folder mounted at `/workspace`. The agent can only work there. You get streaming chat with
+  steer, follow-up, and abort, plus Rewind to jump the conversation back to an earlier message.
+- **A terminal, too.** Type `!command` to run it in the sandbox and see the output in the chat.
+  Good for a quick `!git diff` or `!npm test` without leaving the conversation.
+- **Global chat.** A folderless agent you reach from the home screen. It has no file access
+  because nothing is mounted, but it can still use your connectors and skills, and help you set
+  up Piwork itself.
+- **File browser and viewer.** Browse folders to pick where to start, and read the workspace
+  while a session runs. It shows text, markdown, images, and HTML in a resizable pane. It's
+  read-only: the agent changes files, you look at the results.
+- **Sign in to models.** Connect Anthropic or another provider from inside the app. Piwork opens
+  your browser for the sign-in and finishes the handshake for you, with nothing to copy and paste.
+- **Connectors.** Add hosted services with one click and an OAuth sign-in: Slack, Notion, Linear,
+  Sentry, Stripe. You can also add any other MCP server. This runs on the bundled
+  [`pi-mcp-adapter`](https://pi.dev/packages/pi-mcp-adapter).
+- **Built-in extensions.** Four ship by default, and each is removable in Customise: ask-the-user
+  dialogs, a file and HTML viewer tool, a task list the agent keeps, and subagents
+  (`pi-subagents`). They live in [`packages/piwork-*`](packages), listed in
+  [`built-ins.json`](packages/pi-host/built-ins.json).
+- **Extend it from inside.** Ask Piwork to write a new command, tool, panel, or file renderer,
+  and load it live, for one project or everywhere. There's a reference extension in
+  [`examples/`](examples).
+- **Themes** you can edit in the app.
 
-## Architecture — one contract, three buckets
+## Prerequisites
 
-Piwork keeps the shell tiny and pushes everything it can into Pi extensions, expressed
-through a single UI-intent contract. Everything sorts into three buckets:
+- **Node 22.18 or newer.** Piwork runs `.ts` files directly, so `pi-host` needs no build step.
+- **A container runtime with a working `docker` command.** Docker Desktop, colima, Rancher
+  Desktop, and OrbStack all work. If `docker` isn't on your `PATH` (Rancher's lives at
+  `~/.rd/bin/docker`), set `PIWORK_DOCKER=/path/to/docker`.
+- macOS is the main target for now.
 
-- **Base (host/shell):** an Electron app. Owns the container lifecycle, relays the bridge to
-  a sandboxed renderer, opens OAuth URLs in the real browser, reads workspace files
-  host-side, and writes connector/config files. **Executes no extension code.**
-- **Contract (the wire):** strict LF-only JSONL over the container's stdio. We reuse **Pi's
-  RPC protocol as the intent contract** — it already serialises `ctx.ui` calls into typed
-  JSON intents (`extension_ui_request`) and exposes the typed command surface — rather than
-  inventing one.
-- **Extension (in-container):** `pi-host` embeds the Pi SDK and runs Pi's `runRpcMode`. We
-  **"own the shim"** — prototype-patching `bindExtensions` to augment `ctx.ui` with
-  first-class Piwork intents (`openExternal`, `showArtifact`, `showSessionTree`,
-  `showMcpStatus`) that the shell renders. New capabilities are injected base-extension
-  commands, so adding one = a line in `pi-host` + a renderer in the shell.
+## Quick start (dev build)
+
+```bash
+git clone https://github.com/alext-tessl/pi-work
+cd pi-work
+npm install        # workspaces: shell (React/Vite/Electron), pi-host, built-ins
+npm run image      # build the sandbox image (also runs the verify-pi check)
+npm run dev        # launch Vite + Electron with auto-reload
+```
+
+In the app, open a folder to start a session, or start the global chat. Then connect a model
+from the Models panel, for example by signing in to Anthropic. The first run seeds a fresh agent
+store with the built-in extensions, so there's nothing to install.
+
+While the agent is replying, **Enter** steers, **Alt+Enter** queues a follow-up, and
+**Shift+Enter** adds a newline. The left rail has Files, Customise, Connectors, Models, Rewind,
+Theme, and Debug.
+
+> The renderer hot-reloads, and editing the Electron main or preload relaunches the app.
+> Changing `pi-host`, the Dockerfile, or a built-in means running `npm run image` again and
+> starting a fresh session. To work on a built-in without rebuilding, the shell mounts your
+> `packages/` over the baked copy in dev. To reuse an existing Pi agent home, set
+> `PIWORK_AGENT_DIR=/abs/path/to/agent`.
+
+## How it's built: one contract, three parts
+
+Piwork keeps the shell small and puts as much as it can into Pi extensions, all speaking one
+UI-intent contract. Everything falls into three parts.
+
+- **The shell (host).** An Electron app. It runs the container, relays the bridge to a sandboxed
+  renderer, opens OAuth URLs in your real browser, reads workspace files, and writes connector
+  and config files. It runs no extension code.
+- **The wire (the contract).** Strict LF-only JSONL over the container's stdio. Piwork reuses
+  Pi's RPC protocol as the contract instead of inventing one. It already turns `ctx.ui` calls
+  into typed JSON intents (`extension_ui_request`) and exposes the typed command surface.
+- **The extensions (in the container).** `pi-host` embeds the Pi SDK and runs Pi's `runRpcMode`.
+  Piwork "owns the shim": it patches `bindExtensions` to add first-class Piwork intents to
+  `ctx.ui` (`openExternal`, `showArtifact`, `showSessionTree`, `showMcpStatus`) that the shell
+  renders. Adding a capability is a line in `pi-host` plus a renderer in the shell.
 
 ```
 Electron main (Node, host)                        container (trust boundary)
@@ -60,7 +96,7 @@ Electron main (Node, host)                        container (trust boundary)
  │                    ◄─────────────────────           ├ own-the-shim ctx.ui → intents
  ├ host file reads (workspace)                          ├ base cmds: reload/tree/rewind/mcp-auth
  ├ OAuth + MCP callback servers (browser relay)         ├ pi-mcp-adapter (MCP engine)
- └ IPC (preload, contextIsolation)                      └ Suite extensions (.pi / agent store)
+ └ IPC (preload, contextIsolation)                      └ built-in + installed extensions
       └ React renderer (sandboxed, no Node):
         left rail · chat · file viewer · modals
 ```
@@ -70,128 +106,97 @@ Electron main (Node, host)                        container (trust boundary)
 ```
 packages/
   bridge-protocol/   shared JSONL framing + protocol types + guards (unit-tested)
-  pi-host/           embeds the Pi SDK; container-side bridge + base extension + baked skills
-  shell/             Electron app — electron/ (main, preload, ContainerBridge) + src/ (React)
-  piwork-ask/        built-in: agent asks you a question (choice / free text) mid-turn
-  piwork-artifacts/  built-in: show_artifact tool — present a file / rich HTML in the viewer
-  piwork-tasks/      built-in: a task list the agent maintains, docked + persisted
+  pi-host/           embeds the Pi SDK; container bridge + base extension + baked skills
+                     + built-ins.json (the built-in manifest) + verify harnesses
+  shell/             Electron app: electron/ (main, preload, ContainerBridge) + src/ (React)
+  piwork-ask/        built-in: agent asks you a question (choice or free text) mid-turn
+  piwork-artifacts/  built-in: show_artifact tool, to present a file or rich HTML in the viewer
+  piwork-tasks/      built-in: a task list the agent maintains, docked and persisted
 examples/
-  extensions/        reference extensions (not installed) — e.g. piwork-checkpoint
-images/Dockerfile    node:24 + git + ripgrep + pi-host + pinned Pi SDK + pi-mcp-adapter
+  extensions/        reference extensions (not installed), e.g. piwork-checkpoint
+images/Dockerfile    node:24 + git + ripgrep + pinned Pi SDK + pi-mcp-adapter + pi-subagents
                      + baked built-in extensions + skills
-docs/                living roadmap
 ```
 
-The three `piwork-*` packages are Piwork's **built-in extensions** — baked into the image and
-default-installed into a fresh agent store, but removable per project/globally in Customise.
+The `piwork-*` packages plus `pi-subagents` are the built-in extensions. They're baked into the
+image and installed into a fresh store by default, and each is removable in Customise. Baking
+puts the code in the image; the store's `settings.json` decides what's turned on. To add a
+built-in, add an entry to [`built-ins.json`](packages/pi-host/built-ins.json) and a bake step to
+the Dockerfile. The `verify:builtins` check catches mistakes.
 
-## Prerequisites
+## Extending Piwork from the app
 
-- **Node ≥ 22.18** on the host (native TypeScript type-stripping; `pi-host` and the smoke
-  scripts run `.ts` directly, no build step).
-- **Docker** running (developed on Rancher Desktop).
-- A **model credential** — connect a provider in-app via OAuth, or reuse an existing Pi
-  agent home (see below). Local dev can also self-host on Ollama reached via
-  `host.docker.internal`.
-
-## Build & run
-
-```bash
-npm install                                                   # workspaces: React/Vite/Electron
-docker build -t piwork-sandbox:spike -f images/Dockerfile .   # build the sandbox image
-
-cd packages/shell
-npm run dev                                                   # launches Vite + Electron (auto-reload)
-```
-
-In the app: **Open a folder to work in…** starts a sandboxed session; **💬 New chat** starts
-the folderless global chat. While streaming: **Enter = steer**, **Alt+Enter = follow-up**,
-**Shift+Enter = newline**. The left rail opens Files 📁, Skills 🧩, Connectors 🔌, Rewind ⏪,
-Theme 🎨 and Debug 🐞.
-
-By default the shell uses a shared named volume (`piwork-agent`) as the agent home and you
-connect a provider in-app. To reuse an existing Pi agent home instead, set
-`PIWORK_AGENT_DIR=/abs/path/to/agent` (with `auth.json`/`models.json`/`settings.json`) —
-handy for local dev. `npm run dev` auto-enables `host.docker.internal` for reaching a host
-Ollama.
-
-> Editing the renderer hot-reloads. Editing `electron/main.ts` or `preload.ts` relaunches
-> Electron automatically. Editing `pi-host` or the Dockerfile requires
-> `docker build … -t piwork-sandbox:spike` and a fresh session.
-
-## The Suite
-
-Suite packages are installed from the **Skills 🧩** panel (one-click presets) at global or
-project scope — or via `node scripts/install-suite.mjs`. They're ordinary Pi packages; the
-shell renders whatever intents they emit. None are required; the shell works with zero
-installed.
-
-## Extending Piwork from inside the app
-
-- **Project scope:** in a folder session, ask the agent to add a `/command`, tool or skill.
-  It writes to `/workspace/.pi/{extensions,skills}/…` and runs `/piwork-reload` to load it
-  live. Guided by the baked **`writing-piwork-extensions`** skill. Extensions are
-  `<name>/index.ts` (or flat `<name>.ts`) — **not** `extension.ts`.
-- **Global scope:** in the global chat, purpose-built, path-scoped tools
-  (`piwork_{list,read,write,delete}_config`) let the agent author skills/extensions into the
-  agent store's native scan locations (`~/.pi/agent/{skills,extensions}`), so they load in
-  every session. Guided by the baked **`configuring-piwork`** skill. The tools are scoped to
-  those subtrees, so credentials stay unreachable.
-- **New viewer file types:** an extension registers a `render(file) → { html | markdown }`
-  transform via `globalThis.__piwork.registerFileRenderer`; the sandboxed viewer renders the
+- **For one project.** In a folder session, ask the agent to add a `/command`, tool, or skill.
+  It writes to `/workspace/.pi/{extensions,skills}/…` and runs `/piwork-reload` to load it live.
+  The baked `writing-piwork-extensions` skill guides it. Extensions are `<name>/index.ts` or a
+  flat `<name>.ts`, not `extension.ts`.
+- **For everywhere.** In the global chat, a set of path-scoped tools
+  (`piwork_{list,read,write,delete}_config`) let the agent write skills and extensions into the
+  agent store's own scan locations (`~/.pi/agent/{skills,extensions}`), so they load in every
+  session. The baked `configuring-piwork` skill guides it. Those tools are scoped to the skills
+  and extensions subtrees, so credentials stay out of reach.
+- **New file types in the viewer.** An extension registers a `render(file) → { html | markdown }`
+  transform on `globalThis.__piwork.registerFileRenderer`, and the sandboxed viewer shows the
   result.
 
-## MCP connectors
+There's a worked example to copy from in
+[`examples/extensions/piwork-checkpoint`](examples/extensions/piwork-checkpoint).
 
-Connectors are standard MCP servers described in `mcp.json`, read by the baked
-`pi-mcp-adapter`. Piwork manages those files host-side and drives the adapter's OAuth:
+## Connectors
 
-- **Config:** global connectors → `~/.piwork/mcp-global/mcp.json` (host-side, mounted into
-  the container); project connectors → `<repo>/.pi/mcp.json` (in-repo, portable).
-- **Seamless OAuth:** clicking **Connect** runs the auth flow in a dedicated short-lived
-  container (independent of your chat); the browser redirect lands on a host callback server
-  and completes automatically. Tokens live in the container's agent store and auto-refresh.
-- **Secrets:** the shell refuses to write a token-bearing connector (stdio `env` / auth
-  header) to **project** scope — those would land in an in-repo file. Add token-based
-  connectors at **global** scope, where the secret stays on your machine.
+Connectors are standard MCP servers listed in `mcp.json` and read by the bundled
+`pi-mcp-adapter`. Piwork manages those files on the host and drives the sign-in.
 
-## Verification
+- **Presets.** One-click OAuth connectors for Slack, Notion, Linear, Sentry, and Stripe, plus a
+  form for any other remote or local server. Slack's official remote MCP works, but it needs a
+  workspace admin to approve it.
+- **Where config lives.** Global connectors go in `~/.piwork/mcp-global/mcp.json` on the host,
+  mounted into the container. Project connectors go in `<repo>/.pi/mcp.json`, so they travel with
+  the repo.
+- **Sign-in.** Clicking Connect runs the auth flow in a short-lived container, separate from your
+  chat. Your browser redirect lands on a small local server that finishes the flow. Tokens are
+  stored in the container's agent store and refresh themselves.
+- **Secrets.** Piwork won't write a connector that carries a token into project config, since
+  that file can end up committed. Add token-based connectors as global, where the secret stays on
+  your machine.
 
-`bridge-protocol` has unit tests; the shell has headless smoke tests that drive real
-containers end-to-end (against a local Ollama):
+## Contributing and checks
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and the dev loop, and [SECURITY.md](SECURITY.md)
+for the sandbox model and how to report an issue. Before you open a PR (CI runs all of this on
+every push):
 
 ```bash
-npm test -w @piwork/bridge-protocol                 # framing + guards
-
-node packages/shell/scripts/smoke-bridge.mjs        # Node bridge, end-to-end
-node packages/shell/scripts/smoke-sessions.mjs      # per-folder session history
-node packages/shell/scripts/smoke-suite.mjs         # Suite install + load
-node packages/shell/scripts/smoke-global.mjs        # folderless, tool-restricted global chat
-node packages/shell/scripts/smoke-authoring-e2e.mjs # agent writes a project extension, reload, live
-node packages/shell/scripts/smoke-config.mjs        # global self-authoring (skills + extensions)
-node packages/shell/scripts/smoke-renderers.mjs     # file → artifact renderer contract
-node packages/shell/scripts/smoke-mcp.mjs           # MCP adapter + connector auth wiring
-node packages/shell/scripts/smoke-artifacts.mjs     # artifact / html intent
-node packages/shell/scripts/smoke-tree.mjs          # session tree + rewind
-node packages/shell/scripts/smoke-login.mjs         # provider OAuth relay
+npm run typecheck && npm run lint && npm test
+npm run image && npm run verify:builtins
 ```
+
+Two checks are worth knowing. `verify-pi` runs inside `docker build` and confirms `pi-host`
+still binds to the pinned Pi SDK. `verify:builtins` confirms every built-in still loads and
+registers its tools. For upgrading the Pi SDK, see
+[`packages/pi-host/UPGRADING-PI.md`](packages/pi-host/UPGRADING-PI.md).
+
+There are also deeper end-to-end smoke tests that drive real containers (some need a local
+model) in [`packages/shell/scripts`](packages/shell/scripts).
 
 ## Gotchas worth knowing (learned the hard way)
 
-- **macOS/Rancher bind mounts only work under shared paths** (`/Users`). Sources under
-  `/tmp` or `/var/folders` silently mount empty — write temp fixtures under the repo.
-- **`.ts` packages under `node_modules` won't type-strip**, and richer TS (enums, parameter
-  properties) needs `--experimental-transform-types`. `pi-mcp-adapter` is baked as a plain
-  dir and `pi-host` runs with that flag.
-- **Pi's TUI theme is a `globalThis` singleton** that throws until `initTheme()` runs;
-  headless embeds must call it or extensions that render status crash the session.
-- **`settings.json` with a `packages` array triggers a startup `npm install`** whose
-  subprocess writes to fd 1 (the protocol channel), corrupting it. Keep the agent home
-  clean; bake Suite/engine packages into the image. `pi-host` writes diagnostics to stderr.
-- **`ctx.ui` intents come from `bindExtensions`, not the factory** — Piwork augments the
-  bound `uiContext` on the `AgentSession` prototype so replacement sessions inherit it.
+- **On macOS with Rancher, bind mounts only work under shared paths** like `/Users`. Sources
+  under `/tmp` or `/var/folders` mount empty with no error, so write temp fixtures under the repo
+  or your home directory.
+- **`.ts` packages under `node_modules` won't type-strip.** Richer TS (enums, parameter
+  properties) also needs `--experimental-transform-types`. `pi-mcp-adapter` is baked as a plain
+  directory, and `pi-host` runs with that flag.
+- **Pi's TUI theme is a `globalThis` singleton** that throws until `initTheme()` runs. A headless
+  embed has to call it, or an extension that renders status will crash the session.
+- **A `settings.json` with a `packages` array triggers an `npm install` at startup.** That
+  subprocess writes to fd 1, which is the protocol channel, and corrupts it. Bake extension
+  packages into the image instead; `pi-host` keeps its diagnostics on stderr.
+- **`ctx.ui` intents come from `bindExtensions`, not the factory.** Piwork augments the bound
+  `uiContext` on the `AgentSession` prototype so replacement sessions inherit it.
 
-## Docs
+## Docs and license
 
-- [`pi-cowork-design.md`](./pi-cowork-design.md) — original design & rationale.
-- [`docs/`](./docs) — living roadmap.
+- [`pi-cowork-design.md`](./pi-cowork-design.md) has the original design and rationale.
+- [`docs/`](./docs) holds the living roadmap notes.
+- Licensed **MIT**. See [`LICENSE`](LICENSE) and [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
