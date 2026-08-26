@@ -30,9 +30,9 @@ is to Claude Code.)
   read-only: the agent changes files, you look at the results.
 - **Sign in to models.** Connect Anthropic or another provider from inside the app. Piwork opens
   your browser for the sign-in and finishes the handshake for you, with nothing to copy and paste.
-- **Connectors.** Add hosted services with one click and an OAuth sign-in: Slack, Notion, Linear,
-  Sentry, Stripe. You can also add any other MCP server. This runs on the bundled
-  [`pi-mcp-adapter`](https://pi.dev/packages/pi-mcp-adapter).
+- **Connectors.** Add hosted services with an OAuth sign-in: Notion, Linear, Sentry, Stripe are
+  one click; Slack needs a Slack app you register first. You can also add any other MCP server.
+  This runs on the bundled [`pi-mcp-adapter`](https://pi.dev/packages/pi-mcp-adapter).
 - **Built-in extensions.** Four ship by default, and each is removable in Customise: ask-the-user
   dialogs, a file and HTML viewer tool, a task list the agent keeps, and subagents
   (`pi-subagents`). They live in [`packages/piwork-*`](packages), listed in
@@ -147,9 +147,10 @@ There's a worked example to copy from in
 Connectors are standard MCP servers listed in `mcp.json` and read by the bundled
 `pi-mcp-adapter`. Piwork manages those files on the host and drives the sign-in.
 
-- **Presets.** One-click OAuth connectors for Slack, Notion, Linear, Sentry, and Stripe, plus a
-  form for any other remote or local server. Slack's official remote MCP works, but it needs a
-  workspace admin to approve it.
+- **Presets.** One-click OAuth connectors for Notion, Linear, Sentry, and Stripe, plus a form for
+  any other remote or local server. Slack works too but isn't one click: its MCP server has no
+  dynamic client registration, so you register a Slack app yourself and paste its Client ID and
+  Secret into the "Set up" form (which shows the redirect URL to use).
 - **Where config lives.** Global connectors go in `~/.piwork/mcp-global/mcp.json` on the host,
   mounted into the container. Project connectors go in `<repo>/.pi/mcp.json`, so they travel with
   the repo.
