@@ -339,6 +339,10 @@ button.primary:hover { filter: brightness(1.08); }
 
 .empty-global { text-align: center; max-width: 420px; }
 .empty-global h3 { margin: 0 0 6px; font-size: 15px; color: var(--fg); text-transform: none; letter-spacing: 0; }
+/* Blocking session-start failure (docker missing / daemon down / image not built). */
+.start-error { text-align: center; max-width: 460px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.start-error h3 { margin: 0; font-size: 15px; color: var(--error); text-transform: none; letter-spacing: 0; }
+.start-error p { margin: 0; color: var(--fg); line-height: 1.6; }
 
 /* Add-a-model form in the Model & account panel */
 .add-model-open { display: inline-block; margin: 4px 0 2px; }

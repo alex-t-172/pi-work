@@ -52,6 +52,9 @@ export function useBridge() {
   // connection dropped). We keep the session context and offer/auto-do a reconnect instead
   // of silently bouncing to home. intentionalEnd distinguishes a user-triggered End.
   const [dropped, setDropped] = useState(false);
+  // A blocking session-start failure (docker missing / daemon down / image not built), shown
+  // persistently in the session screen — not just a transient toast.
+  const [startError, setStartError] = useState<string | null>(null);
   const intentionalEnd = useRef(false);
   // Set when the agent presents a workspace file via show_artifact; App opens it in the viewer.
   const [fileOpenRequest, setFileOpenRequest] = useState<{ rel: string; nonce: number } | null>(null);
@@ -440,11 +443,13 @@ export function useBridge() {
     setGlobalMode(false);
     setActiveFolder(folder);
     setDropped(false);
+    setStartError(null);
     setConnection("starting");
     resetSessionState();
     const res = await window.piwork.startSession(folder, session);
     if (!res.ok) {
       setConnection("error");
+      setStartError(res.error ?? "Couldn't start the session.");
       pushToast(res.error ?? "Couldn't start the session.", "error");
     } else {
       void refreshRecent();
@@ -455,11 +460,13 @@ export function useBridge() {
     setGlobalMode(true);
     setActiveFolder(null);
     setDropped(false);
+    setStartError(null);
     setConnection("starting");
     resetSessionState();
     const res = await window.piwork.startGlobalSession(session);
     if (!res.ok) {
       setConnection("error");
+      setStartError(res.error ?? "Couldn't start the session.");
       pushToast(res.error ?? "Couldn't start the session.", "error");
     }
   }, [pushToast, resetSessionState]);
@@ -598,7 +605,7 @@ export function useBridge() {
     sessionTree, treeOpen, setTreeOpen, openSessionTree, rewindTo, rewinding, injectedText,
     systemPrompt, fetchSystemPrompt,
     mcpStatus, setMcpStatus,
-    dropped, reconnect,
+    dropped, reconnect, startError,
     fileOpenRequest,
     submit, abort, respondDialog, setModel,
     startLogin, chooseProvider, submitLoginInput, closeLogin,
