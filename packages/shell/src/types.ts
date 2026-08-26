@@ -107,6 +107,9 @@ export interface McpServer {
   args?: string[];
   headers?: Record<string, string>;
   env?: Record<string, string>; // secrets for stdio servers (e.g. SLACK_BOT_TOKEN)
+  // For OAuth servers that need a pre-registered app (no dynamic client registration, e.g. Slack).
+  oauthClientId?: string;
+  oauthClientSecret?: string; // a secret → global scope only
 }
 export type McpAuthStatus = "authenticated" | "expired" | "not_authenticated" | "n/a";
 export interface McpStatusEntry { name: string; oauth: boolean; status: McpAuthStatus }

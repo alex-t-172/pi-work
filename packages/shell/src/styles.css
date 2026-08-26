@@ -263,6 +263,8 @@ button.primary:hover { filter: brightness(1.08); }
 .connector-form { display: flex; flex-direction: column; gap: 10px; padding: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
 .conn-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
 .conn-field input { background: var(--panel); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; font: inherit; }
+.conn-hint { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
+.conn-hint code { background: var(--code); padding: 1px 5px; border-radius: 4px; word-break: break-all; }
 .conn-transport { display: flex; gap: 16px; font-size: 13px; }
 .conn-transport label { display: flex; align-items: center; gap: 6px; }
 .kv-row { display: flex; gap: 6px; margin-bottom: 6px; }

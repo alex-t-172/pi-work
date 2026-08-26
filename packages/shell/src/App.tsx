@@ -27,8 +27,10 @@ const SUITE_PRESETS = [
 // MCP connector presets: hosted remote MCP servers that authenticate with OAuth — click
 // Add, then Connect and authorize in the browser (no tokens to paste). Powered by the baked
 // pi-mcp-adapter, which handles the OAuth (incl. dynamic client registration) + token refresh.
-const MCP_PRESETS: Array<{ name: string; label: string; url: string; desc: string }> = [
-  { name: "slack", label: "Slack", url: "https://mcp.slack.com/mcp", desc: "Messages, search & canvases (needs workspace-admin approval)" },
+const MCP_PRESETS: Array<{ name: string; label: string; url: string; desc: string; needsApp?: boolean }> = [
+  // Slack has no dynamic client registration, so it can't be one-click: you register a Slack app
+  // and provide its Client ID/Secret. `needsApp` routes it to the guided form instead of Add.
+  { name: "slack", label: "Slack", url: "https://mcp.slack.com/mcp", desc: "Messages, search & canvases. Needs a Slack app you register.", needsApp: true },
   { name: "notion", label: "Notion", url: "https://mcp.notion.com/mcp", desc: "Search & edit your Notion workspace" },
   { name: "linear", label: "Linear", url: "https://mcp.linear.app/mcp", desc: "Issues, projects & cycles" },
   { name: "sentry", label: "Sentry", url: "https://mcp.sentry.dev/mcp", desc: "Errors, issues & traces" },
@@ -1309,14 +1311,17 @@ type KV = { k: string; v: string };
 
 // Add a connector the presets don't cover: a remote MCP URL (OAuth or a bearer/header token),
 // or an advanced local stdio command.
-function CustomConnectorForm(props: { onSave: (s: McpServer) => void; onCancel: () => void }) {
-  const [label, setLabel] = useState("");
+function CustomConnectorForm(props: { onSave: (s: McpServer) => void; onCancel: () => void; initial?: { label?: string; url?: string; needsApp?: boolean } }) {
+  const [label, setLabel] = useState(props.initial?.label ?? "");
   const [kind, setKind] = useState<"remote" | "local">("remote");
-  const [url, setUrl] = useState("");
+  const [url, setUrl] = useState(props.initial?.url ?? "");
   const [remoteAuth, setRemoteAuth] = useState<"oauth" | "token">("oauth");
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
   const [command, setCommand] = useState("npx");
   const [argsText, setArgsText] = useState("");
   const [pairs, setPairs] = useState<KV[]>([{ k: "", v: "" }]);
+  const REDIRECT_URI = "http://localhost:51823/callback"; // mirrors MCP_REDIRECT_URI in main
 
   const setPair = (i: number, patch: Partial<KV>) => setPairs((p) => p.map((row, idx) => (idx === i ? { ...row, ...patch } : row)));
   const addPair = () => setPairs((p) => [...p, { k: "", v: "" }]);
@@ -1329,7 +1334,12 @@ function CustomConnectorForm(props: { onSave: (s: McpServer) => void; onCancel: 
     const kv: Record<string, string> = {};
     for (const { k, v } of pairs) if (k.trim()) kv[k.trim()] = v;
     const server: McpServer = kind === "remote"
-      ? { name, label: label.trim(), url: url.trim(), auth: remoteAuth === "oauth" ? "oauth" : "bearer", ...(remoteAuth === "token" && Object.keys(kv).length ? { headers: kv } : {}) }
+      ? {
+          name, label: label.trim(), url: url.trim(), auth: remoteAuth === "oauth" ? "oauth" : "bearer",
+          ...(remoteAuth === "token" && Object.keys(kv).length ? { headers: kv } : {}),
+          ...(remoteAuth === "oauth" && clientId.trim() ? { oauthClientId: clientId.trim() } : {}),
+          ...(remoteAuth === "oauth" && clientSecret.trim() ? { oauthClientSecret: clientSecret.trim() } : {}),
+        }
       : { name, label: label.trim(), command: command.trim(), args: argsText.split(/\s+/).filter(Boolean), ...(Object.keys(kv).length ? { env: kv } : {}) };
     props.onSave(server);
   };
@@ -1358,6 +1368,18 @@ function CustomConnectorForm(props: { onSave: (s: McpServer) => void; onCancel: 
                 </div>
               ))}
               <button className="link" onClick={addPair}>+ add</button>
+            </div>
+          )}
+          {remoteAuth === "oauth" && (
+            <div className="conn-field">
+              <span>App credentials{props.initial?.needsApp ? "" : " (usually not needed)"}</span>
+              <p className="conn-hint">
+                Most servers register automatically, so leave these blank. Some, like Slack, need an app you
+                register: create one, set its redirect URL to <code>{REDIRECT_URI}</code>, then paste its
+                Client ID and Secret here. A secret makes this a Global-only connector.
+              </p>
+              <input placeholder="Client ID" value={clientId} onChange={(e) => setClientId(e.target.value)} />
+              <input type="password" placeholder="Client Secret" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} />
             </div>
           )}
         </>
@@ -1389,6 +1411,7 @@ function ConnectorsModal(props: { c: ReturnType<typeof useConnectors>; inSession
   const { c } = props;
   const isGlobal = c.mode === "global";
   const [customOpen, setCustomOpen] = useState(false);
+  const [customInitial, setCustomInitial] = useState<{ label?: string; url?: string; needsApp?: boolean } | undefined>(undefined);
   const statusOf = (name: string) => props.status.find((s) => s.name === name);
   const configuredNames = new Set(c.servers.map((s) => s.name));
 
@@ -1433,18 +1456,20 @@ function ConnectorsModal(props: { c: ReturnType<typeof useConnectors>; inSession
 
         <div className="theme-section">Add a connector</div>
         {customOpen ? (
-          <CustomConnectorForm onSave={(server) => { c.add(server); setCustomOpen(false); }} onCancel={() => setCustomOpen(false)} />
+          <CustomConnectorForm initial={customInitial} onSave={(server) => { c.add(server); setCustomOpen(false); setCustomInitial(undefined); }} onCancel={() => { setCustomOpen(false); setCustomInitial(undefined); }} />
         ) : (
           <div className="preset-list">
             {MCP_PRESETS.filter((p) => !configuredNames.has(p.name)).map((p) => (
               <div key={p.name} className="res-row">
                 <div className="res-main"><span className="res-name">{p.label}</span><span className="res-desc">{p.desc}</span></div>
-                <button onClick={() => c.add({ name: p.name, label: p.label, url: p.url, auth: "oauth" })}>Add</button>
+                {p.needsApp
+                  ? <button onClick={() => { setCustomInitial({ label: p.label, url: p.url, needsApp: true }); setCustomOpen(true); }}>Set up</button>
+                  : <button onClick={() => c.add({ name: p.name, label: p.label, url: p.url, auth: "oauth" })}>Add</button>}
               </div>
             ))}
             <div className="res-row">
               <div className="res-main"><span className="res-name">Custom…</span><span className="res-desc">Any MCP server - a remote URL or a local command</span></div>
-              <button onClick={() => setCustomOpen(true)}>Add</button>
+              <button onClick={() => { setCustomInitial(undefined); setCustomOpen(true); }}>Add</button>
             </div>
           </div>
         )}
