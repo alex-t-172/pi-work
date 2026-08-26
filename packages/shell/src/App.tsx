@@ -151,7 +151,14 @@ export default function App() {
           )}
           <StatusBar statuses={b.statuses} streaming={b.streaming} activity={b.activity} onAbort={b.abort} />
           <Widgets lines={b.widgets.above} placement="above" />
-          <Chat items={b.items} connection={b.connection} globalMode={b.globalMode} streamingLabel={b.streaming ? activityLabel(b.activity) : undefined} />
+          <Chat
+            items={b.items}
+            connection={b.connection}
+            globalMode={b.globalMode}
+            streamingLabel={b.streaming ? activityLabel(b.activity) : undefined}
+            startError={b.startError}
+            onRetry={() => (b.globalMode ? b.startGlobal() : b.activeFolder ? b.startWith(b.activeFolder) : undefined)}
+          />
           <Widgets lines={b.widgets.below} placement="below" />
           <Composer taRef={composerRef} streaming={b.streaming} disabled={b.connection !== "connected"} onSubmit={b.submit} commands={b.commands} injected={b.injectedText} canAttach={!b.globalMode && !!b.activeFolder} />
         </div>
@@ -872,7 +879,7 @@ function Widgets(props: { lines: Record<string, string[]>; placement: string }) 
   );
 }
 
-function Chat(props: { items: ChatItem[]; connection: string; globalMode: boolean; streamingLabel?: string }) {
+function Chat(props: { items: ChatItem[]; connection: string; globalMode: boolean; streamingLabel?: string; startError?: string | null; onRetry?: () => void }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true);
@@ -902,7 +909,13 @@ function Chat(props: { items: ChatItem[]; connection: string; globalMode: boolea
   if (props.items.length === 0) {
     return (
       <div className="chat empty" ref={scrollRef} onScroll={onScroll}>
-        {props.connection === "starting" ? (
+        {props.startError ? (
+          <div className="start-error">
+            <h3>Can't start the sandbox</h3>
+            <p>{props.startError}</p>
+            {props.onRetry && <button className="primary" onClick={props.onRetry}>Try again</button>}
+          </div>
+        ) : props.connection === "starting" ? (
           <div className="hint">Starting sandbox…</div>
         ) : props.globalMode ? (
           <div className="empty-global">

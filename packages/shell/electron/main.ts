@@ -235,7 +235,31 @@ ipcMain.handle("piwork:pickWorkspace", async () => {
   return res.canceled || !res.filePaths[0] ? null : res.filePaths[0];
 });
 
+// Preflight the container runtime before starting a session, so a fresh machine gets an
+// actionable message instead of a cryptic "spawn docker ENOENT" toast or a stuck "Starting…".
+// Checks, in order: the docker command exists, the daemon is up, and the image is built.
+// Returns a user-facing message, or null if everything's ready.
+function preflightRuntime(): string | null {
+  const v = spawnSync(DOCKER, ["version", "--format", "{{.Server.Version}}"], { encoding: "utf8", timeout: 10000 });
+  if (v.error) {
+    if ((v.error as NodeJS.ErrnoException).code === "ENOENT") {
+      return `Couldn't find the "${DOCKER}" command. Install a container runtime — Docker Desktop, colima, Rancher Desktop, or OrbStack. If docker isn't on your PATH, set PIWORK_DOCKER to its full path.`;
+    }
+    return `Couldn't run "${DOCKER}": ${v.error.message}`;
+  }
+  if (v.status !== 0) {
+    return `Docker is installed but the daemon isn't responding. Start it (open Docker Desktop, or run "colima start" / "rancherctl start"), then try again.`;
+  }
+  const img = spawnSync(DOCKER, ["image", "inspect", IMAGE], { encoding: "utf8", timeout: 10000 });
+  if (img.status !== 0) {
+    return `The sandbox image "${IMAGE}" isn't built yet. Run "npm run image" (a one-time build, ~2 minutes), then try again.`;
+  }
+  return null;
+}
+
 async function startSessionFor(workspace: string, session?: string, opts?: { global?: boolean }): Promise<{ ok: boolean; error?: string }> {
+  const problem = preflightRuntime();
+  if (problem) { log(`preflight failed: ${problem}`); return { ok: false, error: problem }; }
   try {
     // Detach the old bridge before stopping it, so its intentional "exit" (from replacing it,
     // e.g. during a reconnect) isn't forwarded to the renderer and mistaken for a fresh drop.
