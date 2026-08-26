@@ -11,9 +11,11 @@ Most of Piwork's features are Pi extensions rather than app code, so you can add
 the agent to write one for you. (If you know Claude's tools: Piwork is to Cowork roughly what Pi
 is to Claude Code.)
 
-> **Status:** early, and built entirely with an AI coding agent. Right now it runs as a dev
-> build: clone the repo, build the sandbox image, and run the app. A packaged, downloadable
-> version comes later. macOS first.
+> **Status:** early, and a personal project written mostly with an AI coding agent. It still
+> takes the engineering seriously where it counts: a pinned-SDK contract check gates every image
+> build, CI runs the checks, and the [security model](SECURITY.md) is stated plainly. It runs as
+> a dev build for now — clone the repo, build the sandbox image, run the app; a packaged,
+> downloadable version comes later. macOS first.
 
 ## What it does
 
@@ -30,9 +32,9 @@ is to Claude Code.)
   read-only: the agent changes files, you look at the results.
 - **Sign in to models.** Connect Anthropic or another provider from inside the app. Piwork opens
   your browser for the sign-in and finishes the handshake for you, with nothing to copy and paste.
-- **Connectors.** Add hosted services with one click and an OAuth sign-in: Slack, Notion, Linear,
-  Sentry, Stripe. You can also add any other MCP server. This runs on the bundled
-  [`pi-mcp-adapter`](https://pi.dev/packages/pi-mcp-adapter).
+- **Connectors.** Add hosted services with an OAuth sign-in: Notion, Linear, Sentry, Stripe are
+  one click; Slack needs a Slack app you register first. You can also add any other MCP server.
+  This runs on the bundled [`pi-mcp-adapter`](https://pi.dev/packages/pi-mcp-adapter).
 - **Built-in extensions.** Four ship by default, and each is removable in Customise: ask-the-user
   dialogs, a file and HTML viewer tool, a task list the agent keeps, and subagents
   (`pi-subagents`). They live in [`packages/piwork-*`](packages), listed in
@@ -147,9 +149,10 @@ There's a worked example to copy from in
 Connectors are standard MCP servers listed in `mcp.json` and read by the bundled
 `pi-mcp-adapter`. Piwork manages those files on the host and drives the sign-in.
 
-- **Presets.** One-click OAuth connectors for Slack, Notion, Linear, Sentry, and Stripe, plus a
-  form for any other remote or local server. Slack's official remote MCP works, but it needs a
-  workspace admin to approve it.
+- **Presets.** One-click OAuth connectors for Notion, Linear, Sentry, and Stripe, plus a form for
+  any other remote or local server. Slack works too but isn't one click: its MCP server has no
+  dynamic client registration, so you register a Slack app yourself and paste its Client ID and
+  Secret into the "Set up" form (which shows the redirect URL to use).
 - **Where config lives.** Global connectors go in `~/.piwork/mcp-global/mcp.json` on the host,
   mounted into the container. Project connectors go in `<repo>/.pi/mcp.json`, so they travel with
   the repo.
@@ -195,8 +198,15 @@ model) in [`packages/shell/scripts`](packages/shell/scripts).
 - **`ctx.ui` intents come from `bindExtensions`, not the factory.** Piwork augments the bound
   `uiContext` on the `AgentSession` prototype so replacement sessions inherit it.
 
+## Credits
+
+Piwork is a thin GUI over [Pi](https://github.com/earendil-works/pi) — Pi, and the bundled
+[`pi-mcp-adapter`](https://pi.dev/packages/pi-mcp-adapter), do the actual agent work; Piwork just
+puts a window around them. Thanks to the Pi team ([earendil-works](https://github.com/earendil-works))
+for building it and releasing it openly.
+
 ## Docs and license
 
-- [`pi-cowork-design.md`](./pi-cowork-design.md) has the original design and rationale.
-- [`docs/`](./docs) holds the living roadmap notes.
+- [`pi-cowork-design.md`](./pi-cowork-design.md) has the original design and rationale (a
+  snapshot from the start of the project — the architecture holds, some specifics have evolved).
 - Licensed **MIT**. See [`LICENSE`](LICENSE) and [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
