@@ -11,9 +11,11 @@ Most of Piwork's features are Pi extensions rather than app code, so you can add
 the agent to write one for you. (If you know Claude's tools: Piwork is to Cowork roughly what Pi
 is to Claude Code.)
 
-> **Status:** early, and built entirely with an AI coding agent. Right now it runs as a dev
-> build: clone the repo, build the sandbox image, and run the app. A packaged, downloadable
-> version comes later. macOS first.
+> **Status:** early, and a personal project written mostly with an AI coding agent. It still
+> takes the engineering seriously where it counts: a pinned-SDK contract check gates every image
+> build, CI runs the checks, and the [security model](SECURITY.md) is stated plainly. It runs as
+> a dev build for now — clone the repo, build the sandbox image, run the app; a packaged,
+> downloadable version comes later. macOS first.
 
 ## What it does
 
@@ -195,6 +197,13 @@ model) in [`packages/shell/scripts`](packages/shell/scripts).
   packages into the image instead; `pi-host` keeps its diagnostics on stderr.
 - **`ctx.ui` intents come from `bindExtensions`, not the factory.** Piwork augments the bound
   `uiContext` on the `AgentSession` prototype so replacement sessions inherit it.
+
+## Credits
+
+Piwork is a thin GUI over [Pi](https://github.com/earendil-works/pi) — Pi, and the bundled
+[`pi-mcp-adapter`](https://pi.dev/packages/pi-mcp-adapter), do the actual agent work; Piwork just
+puts a window around them. Thanks to the Pi team ([earendil-works](https://github.com/earendil-works))
+for building it and releasing it openly.
 
 ## Docs and license
 
