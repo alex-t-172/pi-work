@@ -198,6 +198,6 @@ model) in [`packages/shell/scripts`](packages/shell/scripts).
 
 ## Docs and license
 
-- [`pi-cowork-design.md`](./pi-cowork-design.md) has the original design and rationale.
-- [`docs/`](./docs) holds the living roadmap notes.
+- [`pi-cowork-design.md`](./pi-cowork-design.md) has the original design and rationale (a
+  snapshot from the start of the project — the architecture holds, some specifics have evolved).
 - Licensed **MIT**. See [`LICENSE`](LICENSE) and [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).

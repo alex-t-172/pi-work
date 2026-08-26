@@ -1,5 +1,11 @@
 # Piwork - design and build plan
 
+> **This is the original design document**, written at the start of the project. The
+> architecture it describes still holds, but some specifics have evolved — e.g. the "Suite" is
+> now a small set of default **built-in extensions** (see the README), and a few package names
+> and phases have changed. Kept for the design rationale ("why is it built this way"), not as a
+> current status page.
+
 A minimal desktop shell for the Pi coding agent, plus a suite of extensions that deliver Cowork-like functionality on top. Piwork is to Cowork what Pi is to Claude Code: the core is barebones, the features are packages - but the features still get built. Side project, aiming for open source.
 
 ## Executive Summary
