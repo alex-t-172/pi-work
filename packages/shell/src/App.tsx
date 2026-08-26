@@ -609,16 +609,26 @@ function ArtifactsPane(props: {
     if (a) { title = a.title ?? "Artifact"; srcDoc = artifactSrcDoc(a.html ?? (a.markdown ? (marked.parse(a.markdown) as string) : "")); }
   }
 
+  // While dragging, the iframe below must not swallow the mouse: otherwise moving the cursor
+  // over it starves the window's mousemove/mouseup (a separate browsing context eats them), so
+  // the drag never ends ("keeps moving after release") and gets stuck moving toward the iframe.
+  // `dragging` flips the iframe to pointer-events:none so events pass through to the parent.
+  const [dragging, setDragging] = useState(false);
   const startResize = (e: React.MouseEvent) => {
     e.preventDefault();
+    setDragging(true);
     const onMove = (ev: MouseEvent) => props.onWidth(Math.max(320, Math.min(window.innerWidth - 240, window.innerWidth - ev.clientX)));
-    const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+    const onUp = () => {
+      setDragging(false);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
   };
 
   return (
-    <div className="artifacts-pane" style={{ width: props.width }}>
+    <div className={`artifacts-pane ${dragging ? "resizing" : ""}`} style={{ width: props.width }}>
       <div className="art-resizer" onMouseDown={startResize} title="Drag to resize" />
       <header>
         {entries.length > 1 ? (

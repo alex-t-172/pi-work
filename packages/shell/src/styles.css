@@ -71,6 +71,10 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; }
 .art-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .art-select { flex: 1; min-width: 0; background: var(--panel); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; }
 .art-frame { flex: 1; width: 100%; border: 0; background: #fff; display: block; }
+/* During a resize drag, let the mouse pass through the iframe to the parent window (so
+   mousemove/mouseup keep flowing and the drag ends on release), and suppress text selection. */
+.artifacts-pane.resizing .art-frame { pointer-events: none; }
+.artifacts-pane.resizing { user-select: none; }
 
 .topbar {
   display: flex; align-items: center; gap: 10px;
