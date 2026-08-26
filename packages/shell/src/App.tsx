@@ -492,25 +492,39 @@ function FilesPanel(props: {
   );
 }
 
-// Visual session tree. Renders only message nodes (recursing through non-message
-// entries), indented by conversation depth; the current leaf is highlighted; clicking a
-// node rewinds the conversation to that point.
+// A rewind point: a human message, or an end-of-turn agent message with text. Intermediate
+// tool-call entries (empty assistant) and non-message entries aren't rewind targets.
+function isRewindNode(n: TreeNode): boolean {
+  return n.type === "message" && (n.role === "user" || (n.role === "assistant" && n.preview.trim() !== ""));
+}
+// The rewindable messages reachable from a set of nodes, descending THROUGH non-message
+// wrappers so tool-call entries don't count as structure. This is the set of "next messages".
+function nextMessages(nodes: TreeNode[]): TreeNode[] {
+  const out: TreeNode[] = [];
+  for (const n of nodes) {
+    if (isRewindNode(n)) out.push(n);
+    else out.push(...nextMessages(n.children));
+  }
+  return out;
+}
+
+// Visual session tree. Indentation reflects BRANCHES, not message count: a linear
+// conversation stays flat (a plain list), and depth only increases where the conversation
+// actually forked (a message with more than one continuation, created by rewinding). Without
+// this a long linear chat became an unreadable ever-deepening staircase.
 function SessionTreeRows(props: { nodes: TreeNode[]; leaf: string | null; depth: number; disabled: boolean; onRewind: (id: string, prefill?: string) => void }): React.ReactElement {
+  const msgs = nextMessages(props.nodes);
   return (
     <>
-      {props.nodes.map((n) => {
-        // Rewind points are human messages + end-of-turn agent messages (with text).
-        // Skip intermediate tool-call entries (empty assistant) and non-message entries.
-        const isMsg = n.type === "message" && (n.role === "user" || (n.role === "assistant" && n.preview.trim() !== ""));
-        if (!isMsg) {
-          // Skip this entry but keep its children at the same depth.
-          return <SessionTreeRows key={n.id} nodes={n.children} leaf={props.leaf} depth={props.depth} disabled={props.disabled} onRewind={props.onRewind} />;
-        }
+      {msgs.map((n) => {
         const current = n.id === props.leaf;
+        const kids = nextMessages(n.children);
+        // Indent the continuation only at a real fork (>1 next message); linear stays flat.
+        const childDepth = kids.length > 1 ? props.depth + 1 : props.depth;
         return (
           <div key={n.id}>
             <button
-              className={`tree-node ${current ? "current" : ""}`}
+              className={`tree-node ${current ? "current" : ""} ${props.depth > 0 ? "branched" : ""}`}
               style={{ paddingLeft: 8 + props.depth * 16 }}
               disabled={props.disabled || current}
               title={current ? "Current position" : n.role === "user" ? "Rewind to before this message (editable)" : "Rewind to just after this reply"}
@@ -520,8 +534,8 @@ function SessionTreeRows(props: { nodes: TreeNode[]; leaf: string | null; depth:
               <span className="tree-preview">{n.preview || "(empty)"}</span>
               {current && <span className="tree-here">● here</span>}
             </button>
-            {n.children.length > 0 && (
-              <SessionTreeRows nodes={n.children} leaf={props.leaf} depth={props.depth + 1} disabled={props.disabled} onRewind={props.onRewind} />
+            {kids.length > 0 && (
+              <SessionTreeRows nodes={n.children} leaf={props.leaf} depth={childDepth} disabled={props.disabled} onRewind={props.onRewind} />
             )}
           </div>
         );
@@ -854,9 +868,11 @@ function Chat(props: { items: ChatItem[]; connection: string; globalMode: boolea
     const el = scrollRef.current;
     return !el || el.scrollHeight - el.scrollTop - el.clientHeight < 120;
   };
+  // Stick to the bottom on new content ONLY if the user is already there. If they've scrolled
+  // up (e.g. to read long thinking output mid-stream), leave them be — don't yank them down on
+  // every token. Scrolling back to the bottom re-arms the stick (via onScroll → atBottomRef).
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
-    atBottomRef.current = true;
+    if (atBottomRef.current) endRef.current?.scrollIntoView({ behavior: "auto" });
   }, [props.items]);
   // Keep the newest content pinned above the composer when the panel resizes (e.g. the
   // composer is dragged taller) — but only if the user was already at the bottom.

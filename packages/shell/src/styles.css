@@ -8,6 +8,7 @@
   --accent: #6ea8fe;
   --user: #2a3550;
   --code: #0d0f13;
+  --link: #6ea8fe;
   --live: #3fb950;
   --error: #f85149;
   --warn: #d29922;
@@ -144,6 +145,10 @@ button.secondary { background: transparent; }
 .msg .body pre { background: var(--code); color: var(--fg); padding: 10px; border-radius: 8px; overflow-x: auto; }
 .msg .body code { background: var(--code); color: var(--fg); padding: 1px 5px; border-radius: 4px; }
 .msg .body pre code { background: none; padding: 0; }
+/* Markdown links follow the theme's Links colour (only markdown produces <a>; in-app "links"
+   are <button class="link">). Themeable so links stay readable on every theme. */
+a { color: var(--link); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { text-decoration-thickness: 2px; }
 .msg.streaming .body::after { content: "▋"; color: var(--accent); animation: pulse 1s infinite; }
 .msg.tool { display: flex; flex-direction: column; align-items: flex-start; font-size: 13px; align-self: flex-start; max-width: 100%; width: fit-content; }
 .tool-head { display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 5px 10px; color: var(--fg); max-width: 100%; }
@@ -315,6 +320,8 @@ button.primary:hover { filter: brightness(1.08); }
 .tree-node { display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left; background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 6px 8px; margin: 1px 0; }
 .tree-node:hover { background: var(--panel); border-color: var(--border); }
 .tree-node.current { background: var(--panel); border-color: var(--accent); }
+/* Forked branches get a left rule so an indented row reads as "a different path", not noise. */
+.tree-node.branched { border-left: 2px solid var(--border); border-top-left-radius: 0; border-bottom-left-radius: 0; }
 .tree-role { font-size: 11px; color: var(--muted); min-width: 26px; text-transform: uppercase; }
 .tree-preview { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .tree-here { font-size: 11px; color: var(--accent); }
