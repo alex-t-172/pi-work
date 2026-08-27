@@ -217,7 +217,10 @@ a:hover { text-decoration-thickness: 2px; }
 .modal-message { color: var(--muted); margin-bottom: 12px; }
 .modal .options { display: flex; flex-direction: column; gap: 8px; }
 .modal .options button { text-align: left; }
-.modal input, .modal textarea { width: 100%; background: var(--panel); color: var(--fg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font: inherit; margin-bottom: 12px; }
+/* Text fields fill the modal; checkboxes/radios keep their native box (the :not() guards
+   stop them being stretched to full width with the label shoved off to the side). */
+.modal input:not([type="checkbox"]):not([type="radio"]):not([type="color"]), .modal textarea { width: 100%; background: var(--panel); color: var(--fg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font: inherit; margin-bottom: 12px; }
+.modal input[type="checkbox"], .modal input[type="radio"] { accent-color: var(--accent); width: 15px; height: 15px; flex-shrink: 0; margin: 0; }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
 
 .launcher { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
