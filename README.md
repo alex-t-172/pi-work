@@ -201,6 +201,10 @@ model) in [`packages/shell/scripts`](packages/shell/scripts).
   packages into the image instead; `pi-host` keeps its diagnostics on stderr.
 - **`ctx.ui` intents come from `bindExtensions`, not the factory.** Piwork augments the bound
   `uiContext` on the `AgentSession` prototype so replacement sessions inherit it.
+- **Git-ignored or externally-symlinked skills won't load.** Pi respects `.gitignore` when
+  scanning skills, and the sandbox can't follow a skill folder that symlinks outside the
+  workspace — so a skill manager's "managed" install can be invisible even though the files show
+  in the Files panel. Vendor skills as real files under `.pi/skills` or `.agents/skills`.
 
 ## Credits
 

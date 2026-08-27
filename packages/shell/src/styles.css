@@ -262,7 +262,7 @@ button.primary:hover { filter: brightness(1.08); }
 .res-row { display: flex; align-items: center; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--border); }
 .res-main { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
 .res-name { font-weight: 600; }
-.res-desc { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.res-desc { font-size: 12px; color: var(--muted); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
 .install-row { display: flex; gap: 8px; margin-bottom: 4px; }
 .install-row input { flex: 1; background: var(--panel); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; font: inherit; }
 .install-row select { background: var(--panel); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 7px 8px; }
