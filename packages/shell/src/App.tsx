@@ -1266,6 +1266,10 @@ function ResourcesModal(props: { r: ReturnType<typeof useResources>; inSession: 
 
         {tab === "extensions" && (
           <>
+            <div className="theme-section">Web search</div>
+            <WebSearchKey braveKey={r.config.braveApiKey} onSave={r.setBraveKey} />
+
+            <div className="theme-section">Extensions</div>
             <div className="preset-list">
               {SUITE_PRESETS.map((p) => (
                 <div key={p.dir} className="res-row">
@@ -1694,6 +1698,27 @@ const INSTR_KINDS = [
   { key: "append", label: "Append to prompt", hint: "Appended to the system prompt (APPEND_SYSTEM.md)." },
   { key: "replace", label: "Replace prompt", hint: "Replaces the base system prompt (SYSTEM.md)." },
 ];
+// Web search config. web_search + fetch_url are built in and work with no setup (keyless
+// DuckDuckGo). A free Brave Search API key makes results more reliable; it's global config and
+// applies on the next session (Reload to apply).
+function WebSearchKey(props: { braveKey?: string; onSave: (key: string) => void }) {
+  const [val, setVal] = useState(props.braveKey ?? "");
+  const dirty = val.trim() !== (props.braveKey ?? "");
+  return (
+    <div className="websearch-key">
+      <p className="conn-hint">
+        Web search works out of the box. For more reliable results, add a free{" "}
+        <button className="link" onClick={() => window.piwork.openExternal("https://brave.com/search/api/")}>Brave Search API key</button>
+        {" "}(optional). Applies on the next session.
+      </p>
+      <div className="install-row">
+        <input type="password" placeholder="Brave Search API key (optional)" value={val} onChange={(e) => setVal(e.target.value)} />
+        <button disabled={!dirty} onClick={() => props.onSave(val)}>Save</button>
+      </div>
+    </div>
+  );
+}
+
 // Instructions editor — a SECTION inside the Skills/extensions modal (it's all agent-shaping).
 // scope + folder come from the modal's own scope switch.
 function InstructionsSection(props: { scope: "global" | "project"; folder?: string }) {

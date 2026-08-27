@@ -62,6 +62,7 @@ COPY packages/pi-host/built-ins.json ./built-ins.json
 COPY packages/piwork-ask       /opt/piwork-suite/piwork-ask
 COPY packages/piwork-artifacts /opt/piwork-suite/piwork-artifacts
 COPY packages/piwork-tasks     /opt/piwork-suite/piwork-tasks
+COPY packages/piwork-websearch /opt/piwork-suite/piwork-websearch
 
 # BUILD-TIME GATE: assert pi-host still binds to the pinned Pi SDK (all imports resolve,
 # extensions load with zero errors, ModelRuntime/OAuth surface intact, system-prompt hook

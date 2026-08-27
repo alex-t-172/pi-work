@@ -281,6 +281,7 @@ async function startSessionFor(workspace: string, session?: string, opts?: { glo
         PIWORK_SESSION_DIR: sessionDirFor(workspace),
         PIWORK_WS_KEY: hash(workspace),
         MCP_OAUTH_CALLBACK_PORT: String(MCP_CALLBACK_PORT), // adapter's in-container listener (vestigial); we catch on the host
+        ...sessionExtraEnv(), // optional PIWORK_BRAVE_API_KEY for the web-search built-in
         ...(session ? { PIWORK_SESSION: session } : {}),
         // Global console: chat-only (no filesystem tools) + purpose-built config-authoring
         // tools scoped to the agent store's skills/ & extensions/ (Pi's native global-scan
@@ -303,8 +304,15 @@ ipcMain.handle("piwork:listSessions", (_e, workspace: string) => listSessions(wo
 // ── Resource manager (skills / plugins / extensions) ────────────────────────────
 // Shell config store (e.g. whether to share the host's ~/.agents skills into the sandbox).
 const CONFIG_FILE = path.join(os.homedir(), ".piwork", "config.json");
-function getConfig(): { shareAgentsDir?: boolean } {
+function getConfig(): { shareAgentsDir?: boolean; braveApiKey?: string } {
   try { return JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8")); } catch { return {}; }
+}
+// Extra env for the session container. The Brave Search API key (optional) is passed to the
+// baked web-search built-in so it uses Brave instead of keyless DuckDuckGo. Stored host-side
+// (~/.piwork/config.json), never in the workspace/repo.
+function sessionExtraEnv(): Record<string, string> {
+  const key = getConfig().braveApiKey?.trim();
+  return key ? { PIWORK_BRAVE_API_KEY: key } : {};
 }
 function setConfig(patch: Record<string, unknown>) {
   const next = { ...getConfig(), ...patch };

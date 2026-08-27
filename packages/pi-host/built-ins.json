@@ -2,5 +2,6 @@
   { "name": "piwork-ask", "source": "../../../opt/piwork-suite/piwork-ask", "tools": ["ask_user"] },
   { "name": "piwork-artifacts", "source": "../../../opt/piwork-suite/piwork-artifacts", "tools": ["show_artifact"] },
   { "name": "piwork-tasks", "source": "../../../opt/piwork-suite/piwork-tasks", "tools": ["set_tasks"] },
+  { "name": "piwork-websearch", "source": "../../../opt/piwork-suite/piwork-websearch", "tools": ["web_search", "fetch_url"] },
   { "name": "pi-subagents", "source": "../../../opt/pi-subagents", "tools": ["subagent", "subagent_wait"] }
 ]

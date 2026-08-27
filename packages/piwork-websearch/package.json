@@ -1,0 +1,12 @@
+{
+  "name": "piwork-websearch",
+  "version": "0.0.0",
+  "description": "Piwork built-in: web_search and fetch_url tools. Works keyless out of the box (DuckDuckGo); uses the Brave Search API when a key is set.",
+  "keywords": ["pi-package", "piwork"],
+  "pi": {
+    "extensions": ["./extensions"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  }
+}
