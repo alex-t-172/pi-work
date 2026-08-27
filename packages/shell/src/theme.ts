@@ -53,11 +53,18 @@ export interface ThemeState {
 
 /** Built-in colour presets. Each is a COMPLETE set so switching never leaves stale tokens. */
 export const PRESETS: Record<string, ThemeColors> = {
-  Midnight: { bg: "#16181d", bg2: "#1d2027", panel: "#23262e", border: "#2f333c", fg: "#e6e8ec", muted: "#8b909a", accent: "#6ea8fe", user: "#2a3550", code: "#0d0f13", link: "#6ea8fe", live: "#3fb950", error: "#f85149", warn: "#d29922" },
+  // Softened from the original: text is a cool grey rather than near-white, so the contrast
+  // against the dark ground no longer strains the eyes; the ground lifts a touch to match.
+  Midnight: { bg: "#191c22", bg2: "#20242b", panel: "#262a32", border: "#333844", fg: "#cbd1db", muted: "#868c98", accent: "#6ea8fe", user: "#2a3550", code: "#10131a", link: "#7cb0ff", live: "#3fb950", error: "#f85149", warn: "#d29922" },
   Graphite: { bg: "#1a1a1a", bg2: "#212121", panel: "#282828", border: "#383838", fg: "#eaeaea", muted: "#9a9a9a", accent: "#e0895a", user: "#33302b", code: "#121212", link: "#e0a070", live: "#7fb950", error: "#f06a6a", warn: "#d8a657" },
   Light: { bg: "#f7f8fa", bg2: "#eef0f3", panel: "#ffffff", border: "#d8dce2", fg: "#1c1f24", muted: "#6b7280", accent: "#2563eb", user: "#dbe6ff", code: "#eef1f4", link: "#2563eb", live: "#1a7f37", error: "#cf222e", warn: "#9a6700" },
-  Sepia: { bg: "#f4ecd8", bg2: "#ece3cc", panel: "#fbf5e6", border: "#ddd0b0", fg: "#3b352a", muted: "#8a7f68", accent: "#b3541e", user: "#e8dcc0", code: "#e8dcc0", link: "#9a4515", live: "#5a7d2a", error: "#a3311e", warn: "#9a6700" },
-  Matrix: { bg: "#000000", bg2: "#0a0f0a", panel: "#0d160d", border: "#173d17", fg: "#c8facc", muted: "#4f8f57", accent: "#39ff14", user: "#0f2a12", code: "#08120a", link: "#57ff6a", live: "#39ff14", error: "#ff5555", warn: "#e3b341" },
+  // Warm paper with a dark ink text and a muted teal accent — a reading-room palette, kept
+  // deliberately clear of the cream-and-coral look it used to lean on.
+  Sepia: { bg: "#f1ead8", bg2: "#e8e0cd", panel: "#faf4e4", border: "#d9cdb2", fg: "#33302a", muted: "#867a60", accent: "#2b7a70", user: "#e4dcc4", code: "#e8e0cd", link: "#1f6f65", live: "#5a7d2a", error: "#a3311e", warn: "#9a6700" },
+  // A phosphor terminal on a true-black ground: the green comes in through the accents,
+  // borders, and links rather than the surface, and the text is a soft pale green so the
+  // whole screen no longer reads as saturated green.
+  Matrix: { bg: "#000000", bg2: "#070a07", panel: "#0b100c", border: "#1d3f27", fg: "#cfe6d3", muted: "#5f9668", accent: "#33d15b", user: "#0f2716", code: "#060a07", link: "#62d67c", live: "#33d15b", error: "#ff6b6b", warn: "#e3b341" },
 };
 
 export const DEFAULT_THEME: ThemeState = { activeId: "preset:Midnight", overrides: {}, userThemes: {} };
