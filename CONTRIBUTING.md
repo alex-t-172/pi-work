@@ -43,7 +43,7 @@ built-in extensions.
 - **`pi-host`, the built-in extensions, or the Dockerfile** are baked into the image → re-run
   `npm run image` and start a fresh session.
 - To iterate on a **built-in extension** without rebuilding, the shell live-mounts the repo's
-  `packages/` over the baked copy in dev (`DEV_SUITE_DIR`), so edits + `/piwork-reload` apply live.
+  `packages/` over the baked copy in dev (set `PIWORK_SUITE_DIR`), so edits + `/piwork-reload` apply live.
 
 ## Before you open a PR
 

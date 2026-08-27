@@ -114,7 +114,6 @@ export interface McpServer {
 }
 export type McpAuthStatus = "authenticated" | "expired" | "not_authenticated" | "n/a";
 export interface McpStatusEntry { name: string; oauth: boolean; status: McpAuthStatus }
-export interface McpStatus { servers: McpStatusEntry[] }
 
 export interface ResourceItem {
   name: string;
