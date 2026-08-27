@@ -35,7 +35,7 @@ export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: "set_tasks",
     label: "Set task list",
-    description: "Replace the visible task list. Pass the full current list each time. Use to plan multi-step work and track progress.",
+    description: "Replace the visible task list — pass the full list each time. Use it to plan and track multi-step work.",
     parameters: {
       type: "object",
       properties: {
@@ -53,7 +53,7 @@ export default function (pi: ExtensionAPI) {
     } as never,
     execute: async (_toolCallId, params, _signal, _onUpdate, ctx) => {
       const tasks: Task[] = Array.isArray((params as { tasks?: Task[] }).tasks) ? (params as { tasks: Task[] }).tasks : [];
-      pi.appendEntry(CUSTOM_TYPE, { tasks }); // persist (survives compaction/reload)
+      pi.appendEntry(CUSTOM_TYPE, { tasks }); // persist
       render((ctx as { ui: never }).ui, tasks);
       const done = tasks.filter((t) => t.status === "done").length;
       return { content: [{ type: "text", text: `Task list updated (${done}/${tasks.length} done).` }], details: { tasks } };

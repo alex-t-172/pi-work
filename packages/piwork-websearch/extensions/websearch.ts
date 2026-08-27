@@ -127,7 +127,7 @@ export default function (pi: ExtensionAPI) {
     name: "web_search",
     label: "Web search",
     description:
-      "Search the web and get a list of results (title, URL, snippet). Use for current information, docs, or anything outside the workspace. Follow up with fetch_url to read a result's page.",
+      "Search the web for results (title, URL, snippet) — current info, docs, anything outside the workspace. Use `fetch_url` to read a result's page.",
     parameters: {
       type: "object",
       properties: {
@@ -157,7 +157,7 @@ export default function (pi: ExtensionAPI) {
           lastErr = e instanceof Error ? e.message : String(e);
         }
       }
-      const hint = key ? "" : " Keyless search may be rate-limited right now; add a free Brave Search API key in Piwork's settings (Customise → Extensions → Web search) for reliable results.";
+      const hint = key ? "" : " Keyless search may be rate-limited; add a free Brave Search API key in Customise → Extensions → Web search for more reliable results.";
       const detail = lastErr ? ` (${lastErr})` : "";
       return { content: [{ type: "text", text: `No results for "${p.query}".${detail}${hint}` }], details: { results: [], error: lastErr || undefined } };
     },

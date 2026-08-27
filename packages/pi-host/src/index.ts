@@ -139,9 +139,6 @@ function piVersion(): string {
 // Baked-in "how to write a Piwork extension/skill" guide (see Dockerfile COPY).
 const PIWORK_SKILLS_DIR = "/opt/pi-host/skills";
 
-// Always-on base extension: gives every session a /piwork-reload command so newly
-// authored/installed extensions, skills and connectors go live WITHOUT ending the
-// session. Injected via the resource loader, so it needs no package install.
 // Trim a SessionTreeNode into a compact serializable shape for the shell's tree view.
 function trimTreeNode(node: any): any {
   const e = node?.entry ?? {};
@@ -192,6 +189,9 @@ const PIWORK_ENV_FOLDER = `You are running inside Piwork, a desktop app that put
 - The user reads your replies in a graphical app, not a terminal, so don't rely on keystroke- or TUI-only instructions.`;
 const PIWORK_ENV_GLOBAL = `You are running inside Piwork, a desktop app for pi. This is a folderless global chat: you have no file access here, but you can help the user set up and customise Piwork itself — its global skills, commands, and tools.`;
 
+// Always-on base extension: gives every session a /piwork-reload command so newly
+// authored/installed extensions, skills and connectors go live WITHOUT ending the
+// session. Injected via the resource loader, so it needs no package install.
 export const piworkBaseExtension = (pi: {
   registerCommand: (name: string, opts: { description: string; handler: (args: string, ctx: any) => Promise<void> }) => void;
   on: (event: string, handler: (event: any, ctx: any) => unknown) => void;

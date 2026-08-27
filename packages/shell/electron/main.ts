@@ -400,10 +400,6 @@ ipcMain.handle("piwork:reloadSession", async () => {
 ipcMain.handle("piwork:getConfig", () => getConfig());
 ipcMain.handle("piwork:setConfig", (_e, patch: Record<string, unknown>) => setConfig(patch));
 
-// Add (or update) a custom model in the agent store's models.json, then restart the session
-// so its ModelRegistry re-reads it. Lets you use a model the pinned Pi SDK doesn't list yet
-// (e.g. a just-released Opus) without waiting for an SDK bump: it merges into the built-in
-// provider by id and reuses that provider's existing OAuth / API-key auth.
 // Read/write a file in the agent store (host dir directly; a docker volume via a throwaway
 // container, since main can't fs-touch a volume). `name` is a fixed filename from our code
 // (models.json / settings.json / SYSTEM.md / …), never raw user input.

@@ -1,7 +1,7 @@
 {
   "name": "piwork-ask",
   "version": "0.0.0",
-  "description": "Piwork Suite: lets the agent ask the user a question (choice or free text) via a native dialog, mid-turn.",
+  "description": "Lets the agent ask the user a question (choice or free text) mid-turn.",
   "keywords": ["pi-package", "piwork"],
   "pi": {
     "extensions": ["./extensions"]

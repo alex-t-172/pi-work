@@ -13,7 +13,7 @@ export default function (pi: ExtensionAPI) {
     name: "ask_user",
     label: "Ask the user",
     description:
-      "Ask the user a question and wait for their answer. Provide `options` for a multiple-choice question, set `yesNo` for a confirmation, or omit both for free text. Use when you need a decision or missing info to proceed.",
+      "Ask the user a question and wait for their answer. Provide `options` for multiple choice, set `yesNo` for a confirmation, or omit both for free text.",
     parameters: {
       type: "object",
       properties: {

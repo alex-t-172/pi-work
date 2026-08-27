@@ -1,7 +1,7 @@
 {
   "name": "piwork-tasks",
   "version": "0.0.0",
-  "description": "Piwork Suite: a task list the agent maintains, shown as a docked widget and persisted across compaction/reload.",
+  "description": "A task list the agent maintains, shown as a docked widget.",
   "keywords": ["pi-package", "piwork"],
   "pi": {
     "extensions": ["./extensions"]

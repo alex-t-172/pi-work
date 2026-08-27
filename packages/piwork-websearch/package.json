@@ -1,7 +1,7 @@
 {
   "name": "piwork-websearch",
   "version": "0.0.0",
-  "description": "Piwork built-in: web_search and fetch_url tools. Works keyless out of the box (DuckDuckGo); uses the Brave Search API when a key is set.",
+  "description": "web_search and fetch_url tools. Keyless by default (DuckDuckGo), or the Brave Search API with a key.",
   "keywords": ["pi-package", "piwork"],
   "pi": {
     "extensions": ["./extensions"]
