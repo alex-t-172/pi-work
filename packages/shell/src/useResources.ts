@@ -9,7 +9,7 @@ export function useResources() {
   const [mode, setMode] = useState<ResourceMode>("global");
   const [workspace, setWorkspace] = useState<string>(""); // "" ⇒ global store
   const [data, setData] = useState<ResourceList | null>(null);
-  const [config, setConfigState] = useState<{ shareAgentsDir?: boolean }>({});
+  const [config, setConfigState] = useState<{ shareAgentsDir?: boolean; braveApiKey?: string }>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false); // install/remove happened → running session needs reload
@@ -58,6 +58,14 @@ export function useResources() {
     setDirty(true);
   }, []);
 
+  // Optional Brave Search API key for the web-search built-in. Applies on the next session
+  // start (it's passed to the container as an env var), so mark the session dirty for reload.
+  const setBraveKey = useCallback(async (key: string) => {
+    const next = await window.piwork.setConfig({ braveApiKey: key.trim() });
+    setConfigState(next);
+    setDirty(true);
+  }, []);
+
   const reload = useCallback(async () => {
     setBusy("Reloading session…");
     await window.piwork.reloadSession();
@@ -66,5 +74,5 @@ export function useResources() {
     setOpen(false);
   }, []);
 
-  return { open, mode, workspace, data, config, busy, error, dirty, openFor, close, install, remove, setShareAgents, reload };
+  return { open, mode, workspace, data, config, busy, error, dirty, openFor, close, install, remove, setShareAgents, setBraveKey, reload };
 }

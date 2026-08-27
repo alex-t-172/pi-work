@@ -35,8 +35,11 @@ is to Claude Code.)
 - **Connectors.** Add hosted services with an OAuth sign-in: Notion, Linear, Sentry, Stripe are
   one click; Slack needs a Slack app you register first. You can also add any other MCP server.
   This runs on the bundled [`pi-mcp-adapter`](https://pi.dev/packages/pi-mcp-adapter).
-- **Built-in extensions.** Four ship by default, and each is removable in Customise: ask-the-user
-  dialogs, a file and HTML viewer tool, a task list the agent keeps, and subagents
+- **Web search, built in.** Pi ships no web search, so Piwork adds `web_search` and `fetch_url`
+  that work with no setup (keyless DuckDuckGo). Add a free Brave Search API key in Customise for
+  more reliable results.
+- **Built-in extensions.** A handful ship by default, each removable in Customise: ask-the-user
+  dialogs, a file and HTML viewer tool, a task list the agent keeps, web search, and subagents
   (`pi-subagents`). They live in [`packages/piwork-*`](packages), listed in
   [`built-ins.json`](packages/pi-host/built-ins.json).
 - **Extend it from inside.** Ask Piwork to write a new command, tool, panel, or file renderer,
@@ -113,6 +116,7 @@ packages/
   shell/             Electron app: electron/ (main, preload, ContainerBridge) + src/ (React)
   piwork-ask/        built-in: agent asks you a question (choice or free text) mid-turn
   piwork-artifacts/  built-in: show_artifact tool, to present a file or rich HTML in the viewer
+  piwork-websearch/  built-in: web_search + fetch_url (keyless, or Brave with a key)
   piwork-tasks/      built-in: a task list the agent maintains, docked and persisted
 examples/
   extensions/        reference extensions (not installed), e.g. piwork-checkpoint

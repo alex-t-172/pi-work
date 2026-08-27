@@ -17,14 +17,15 @@ export interface PiworkApi {
   stopSession(): Promise<void>;
   recentFolders(): Promise<string[]>;
   listSessions(workspace: string): Promise<SessionMeta[]>;
+  listGlobalSessions(): Promise<SessionMeta[]>;
   getTheme(): Promise<unknown>;
   setTheme(theme: unknown): void;
   listResources(workspace: string): Promise<ResourceList>;
   installPackage(workspace: string, source: string, scope: "global" | "project"): Promise<{ ok: boolean; error?: string }>;
   removePackage(workspace: string, source: string, scope: "global" | "project"): Promise<{ ok: boolean; error?: string }>;
   reloadSession(): Promise<{ ok: boolean; error?: string }>;
-  getConfig(): Promise<{ shareAgentsDir?: boolean }>;
-  setConfig(patch: Record<string, unknown>): Promise<{ shareAgentsDir?: boolean }>;
+  getConfig(): Promise<{ shareAgentsDir?: boolean; braveApiKey?: string }>;
+  setConfig(patch: Record<string, unknown>): Promise<{ shareAgentsDir?: boolean; braveApiKey?: string }>;
   getMcpServers(scope: "global" | "project", folder?: string): Promise<{ servers: McpServer[] }>;
   setMcpServers(scope: "global" | "project", folder: string | undefined, servers: McpServer[]): Promise<{ ok: boolean; error?: string }>;
   mcpConnect(server: string, scope: "global" | "project", folder?: string): Promise<{ ok: boolean; error?: string }>;

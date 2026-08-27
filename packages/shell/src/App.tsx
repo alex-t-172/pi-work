@@ -16,12 +16,15 @@ import debugIcon from "./assets/rail/debug.png";
 import rewindIcon from "./assets/rail/rewind.png";
 
 // Curated presets installable in one click (sources are container-side suite paths).
+// Curated extensions you can install/remove in one click. The first four are also the defaults
+// (baked + auto-installed — this list lets you remove them); the rest are optional.
 const SUITE_PRESETS = [
-  { name: "Checkpoint", source: "/opt/piwork-suite/piwork-checkpoint", dir: "piwork-checkpoint", desc: "Git auto-commit before each turn (safety net)" },
+  { name: "Ask", source: "/opt/piwork-suite/piwork-ask", dir: "piwork-ask", desc: "Let the agent ask you a question mid-turn" },
   { name: "Artifacts", source: "/opt/piwork-suite/piwork-artifacts", dir: "piwork-artifacts", desc: "Present a finished file or view in the viewer" },
   { name: "Tasks", source: "/opt/piwork-suite/piwork-tasks", dir: "piwork-tasks", desc: "A task list the agent maintains, shown as a docked widget" },
-  { name: "Ask", source: "/opt/piwork-suite/piwork-ask", dir: "piwork-ask", desc: "Let the agent ask you a question mid-turn" },
-  { name: "Renderers", source: "/opt/piwork-suite/piwork-renderers", dir: "piwork-renderers", desc: "Show CSV and TSV files as tables in the viewer" },
+  { name: "Web search", source: "/opt/piwork-suite/piwork-websearch", dir: "piwork-websearch", desc: "web_search + fetch_url (keyless, or Brave with a key)" },
+  { name: "Subagents", source: "/opt/pi-subagents", dir: "pi-subagents", desc: "Delegate work to subagents. Powerful, but adds ~2s to session startup." },
+  { name: "Checkpoint", source: "/opt/piwork-suite/piwork-checkpoint", dir: "piwork-checkpoint", desc: "Git auto-commit before each turn (safety net)" },
 ];
 
 // MCP connector presets: hosted remote MCP servers that authenticate with OAuth — click
@@ -191,18 +194,20 @@ export default function App() {
             {/* Same TopBar frame: on the folder screen Home is leftmost (→ back to home);
                 on the true home screen the slot is the Piwork brand (you're already home). */}
             <TopBar
-              onHome={b.launcherFolder ? b.backToFolders : undefined}
-              folderName={b.launcherFolder ? basename(b.launcherFolder) : undefined}
+              onHome={b.launcherFolder || b.launcherGlobal ? b.backToFolders : undefined}
+              folderName={b.launcherFolder ? basename(b.launcherFolder) : b.launcherGlobal ? "Global chat" : undefined}
               folderPath={b.launcherFolder ?? undefined}
             />
             <Launcher
               recentFolders={b.recentFolders}
               folder={b.launcherFolder}
+              global={b.launcherGlobal}
               sessions={b.launcherSessions}
               onPick={b.pickFolder}
               onSelectFolder={b.selectFolder}
               onStart={b.startWith}
-              onNewChat={() => b.startGlobal()}
+              onSelectGlobal={b.selectGlobal}
+              onStartGlobal={(s) => b.startGlobal(s)}
             />
           </div>
           {openFile && (
@@ -263,12 +268,42 @@ function relTime(iso: string): string {
 function Launcher(props: {
   recentFolders: string[];
   folder: string | null;
+  global?: boolean;
   sessions: SessionMeta[] | null;
   onPick: () => void;
   onSelectFolder: (folder: string) => void;
   onStart: (folder: string, session?: string) => void;
-  onNewChat: () => void;
+  onSelectGlobal: () => void;
+  onStartGlobal: (session?: string) => void;
 }) {
+  // Global-chat launcher: past global chats + New chat (mirrors a folder's history view).
+  if (props.global) {
+    return (
+      <div className="launcher">
+        <div className="launcher-body">
+          <div className="folder-actions">
+            <button className="primary" onClick={() => props.onStartGlobal("new")}>＋ New chat</button>
+          </div>
+          <p className="muted">A general agent chat with no file access.</p>
+          <h3>History</h3>
+          {props.sessions === null ? (
+            <Loading label="Loading chats…" />
+          ) : props.sessions.length === 0 ? (
+            <p className="muted">No past global chats yet.</p>
+          ) : (
+            <div className="session-list">
+              {props.sessions.map((s) => (
+                <button key={s.path} className="session-row" onClick={() => props.onStartGlobal(s.path)}>
+                  <span className="session-first">{s.name || s.firstMessage || "(empty chat)"}</span>
+                  <span className="session-meta">{s.messageCount} msg · {relTime(s.modified)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="launcher">
       {!props.folder ? (
@@ -277,7 +312,7 @@ function Launcher(props: {
           <p className="muted">Pick a folder for the agent to work in, or start a global chat with no file access.</p>
           <div className="folder-actions">
             <button className="primary" onClick={props.onPick}>Open a folder to work in…</button>
-            <button className="cta-alt" onClick={props.onNewChat}>New chat</button>
+            <button className="cta-alt" onClick={props.onSelectGlobal}>New chat</button>
           </div>
           {props.recentFolders.length > 0 && (
             <>
@@ -1268,6 +1303,10 @@ function ResourcesModal(props: { r: ReturnType<typeof useResources>; inSession: 
 
         {tab === "extensions" && (
           <>
+            <div className="theme-section">Web search</div>
+            <WebSearchKey braveKey={r.config.braveApiKey} onSave={r.setBraveKey} />
+
+            <div className="theme-section">Extensions</div>
             <div className="preset-list">
               {SUITE_PRESETS.map((p) => (
                 <div key={p.dir} className="res-row">
@@ -1717,6 +1756,27 @@ const INSTR_KINDS = [
   { key: "append", label: "Append to prompt", hint: "Appended to the base system prompt (APPEND_SYSTEM.md)" },
   { key: "replace", label: "Replace prompt", hint: "Replaces the base system prompt (SYSTEM.md)" },
 ];
+// Web search config. web_search + fetch_url are built in and work with no setup (keyless
+// DuckDuckGo). A free Brave Search API key makes results more reliable; it's global config and
+// applies on the next session (Reload to apply).
+function WebSearchKey(props: { braveKey?: string; onSave: (key: string) => void }) {
+  const [val, setVal] = useState(props.braveKey ?? "");
+  const dirty = val.trim() !== (props.braveKey ?? "");
+  return (
+    <div className="websearch-key">
+      <p className="conn-hint">
+        Web search works out of the box. For more reliable results, add a free{" "}
+        <button className="link" onClick={() => window.piwork.openExternal("https://brave.com/search/api/")}>Brave Search API key</button>
+        {" "}(optional). Applies on the next session.
+      </p>
+      <div className="install-row">
+        <input type="password" placeholder="Brave Search API key (optional)" value={val} onChange={(e) => setVal(e.target.value)} />
+        <button disabled={!dirty} onClick={() => props.onSave(val)}>Save</button>
+      </div>
+    </div>
+  );
+}
+
 // Instructions editor — a SECTION inside the Skills/extensions modal (it's all agent-shaping).
 // scope + folder come from the modal's own scope switch.
 function InstructionsSection(props: { scope: "global" | "project"; folder?: string }) {
