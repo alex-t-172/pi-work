@@ -1350,34 +1350,26 @@ function ResourcesModal(props: { r: ReturnType<typeof useResources>; inSession: 
           const skillItems = [...managed(d.skills), ...inherited(d.skills)];
           return (
           <>
-            <div className="callout">
-              To add skills, ask the agent to install them with a skill manager like <b>Tessl</b> or <b>skills.sh</b>.
-              {" "}{isGlobal
-                ? "Global skills live in your agent store and load in every project."
-                : "Project skills live in this folder's .pi/skills or .agents/skills; global skills (from your agent store) are inherited here."}
-            </div>
+            <div className="callout">Ask the agent to install skills with a skill manager (<b>Tessl</b>, <b>skills.sh</b>).</div>
             {loading ? (
               <Loading label="Loading…" />
             ) : (
               <>
                 {skillItems.length === 0 && (
-                  <p className="muted">No skills installed {isGlobal ? "globally" : "for this project"} yet.</p>
+                  <p className="muted">No {isGlobal ? "global" : "project"} skills yet.</p>
                 )}
                 <ResourceGroup title="Active skills" items={skillItems} render={(s) => s.description ?? ""} scoped />
                 <ResourceGroup title="Prompt templates" items={[...managed(d.prompts), ...inherited(d.prompts)]} render={(p) => p.description ?? ""} scoped />
-                <p className="conn-hint">
-                  Don't see a skill you installed? The sandbox skips skills that are git-ignored, or whose folder is a symlink pointing outside the workspace — so some tools' managed installs won't appear. Skills that live as real files in the folder always do.
-                </p>
+                <p className="conn-hint">Git-ignored skills, or skills symlinked outside the folder, won't load.</p>
               </>
             )}
             {isGlobal && (
               <>
-                <div className="theme-section">Skills from your machine</div>
+                <div className="theme-section">Machine-wide skills</div>
                 <label className="tune-row">
                   <input type="checkbox" checked={!!r.config.shareAgentsDir} onChange={(e) => r.setShareAgents(e.target.checked)} />
-                  <span>Also load skills from <code>~/.agents</code></span>
+                  <span>Also load from <code>~/.agents</code></span>
                 </label>
-                <p className="conn-hint">A shared folder on your machine that some tools (Tessl, skills.sh) install skills into — turning this on makes them available across every project.</p>
               </>
             )}
           </>
