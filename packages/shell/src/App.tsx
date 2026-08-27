@@ -1365,6 +1365,9 @@ function ResourcesModal(props: { r: ReturnType<typeof useResources>; inSession: 
                 )}
                 <ResourceGroup title="Active skills" items={skillItems} render={(s) => s.description ?? ""} scoped />
                 <ResourceGroup title="Prompt templates" items={[...managed(d.prompts), ...inherited(d.prompts)]} render={(p) => p.description ?? ""} scoped />
+                <p className="conn-hint">
+                  Don't see a skill you installed? The sandbox skips skills that are git-ignored, or whose folder is a symlink pointing outside the workspace — so some tools' managed installs won't appear. Skills that live as real files in the folder always do.
+                </p>
               </>
             )}
             {isGlobal && (
