@@ -1354,7 +1354,7 @@ function ResourcesModal(props: { r: ReturnType<typeof useResources>; inSession: 
               To add skills, ask the agent to install them with a skill manager like <b>Tessl</b> or <b>skills.sh</b>.
               {" "}{isGlobal
                 ? "Global skills live in your agent store and load in every project."
-                : "Project skills live in this folder's .pi/skills; global skills (from your agent store) are inherited here."}
+                : "Project skills live in this folder's .pi/skills or .agents/skills; global skills (from your agent store) are inherited here."}
             </div>
             {loading ? (
               <Loading label="Loading…" />
