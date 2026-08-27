@@ -61,9 +61,10 @@ export const PRESETS: Record<string, ThemeColors> = {
   // Warm paper with a dark ink text and a muted teal accent — a reading-room palette, kept
   // deliberately clear of the cream-and-coral look it used to lean on.
   Sepia: { bg: "#f1ead8", bg2: "#e8e0cd", panel: "#faf4e4", border: "#d9cdb2", fg: "#33302a", muted: "#867a60", accent: "#2b7a70", user: "#e4dcc4", code: "#e8e0cd", link: "#1f6f65", live: "#5a7d2a", error: "#a3311e", warn: "#9a6700" },
-  // A phosphor terminal, dialled back from neon: a readable medium green on a near-black
-  // green-black, so the identity reads without the glare.
-  Matrix: { bg: "#05130b", bg2: "#0a1b10", panel: "#0e2114", border: "#1a3a24", fg: "#8ad197", muted: "#4e8c5a", accent: "#34c257", user: "#102a17", code: "#07160d", link: "#5fca77", live: "#34c257", error: "#ff6b6b", warn: "#e3b341" },
+  // A phosphor terminal on a true-black ground: the green comes in through the accents,
+  // borders, and links rather than the surface, and the text is a soft pale green so the
+  // whole screen no longer reads as saturated green.
+  Matrix: { bg: "#000000", bg2: "#070a07", panel: "#0b100c", border: "#1d3f27", fg: "#cfe6d3", muted: "#5f9668", accent: "#33d15b", user: "#0f2716", code: "#060a07", link: "#62d67c", live: "#33d15b", error: "#ff6b6b", warn: "#e3b341" },
 };
 
 export const DEFAULT_THEME: ThemeState = { activeId: "preset:Midnight", overrides: {}, userThemes: {} };
