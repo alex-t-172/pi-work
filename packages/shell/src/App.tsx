@@ -1082,6 +1082,7 @@ const Composer = (function () {
     const [text, setText] = useState("");
     const [sel, setSel] = useState(0);
     const [dismissed, setDismissed] = useState(false);
+    const menuRef = useRef<HTMLDivElement | null>(null);
     // Pending attachments (host source paths) — copied into .attachments/ on send, not now,
     // so removing a chip or not sending leaves no orphan files.
     const [attachments, setAttachments] = useState<Array<{ name: string; path: string }>>([]);
@@ -1128,10 +1129,14 @@ const Composer = (function () {
     const suggestions = match
       ? props.commands
           .filter((cmd) => cmd.name.toLowerCase().startsWith(match[1].toLowerCase()))
-          .slice(0, 8)
+          .slice(0, 50) // includes skills (/skill:…), not just the first handful; the menu scrolls
       : [];
     const open = suggestions.length > 0 && !dismissed;
     const clampedSel = Math.min(sel, Math.max(0, suggestions.length - 1));
+    // Keep the arrow-selected item in view (the menu scrolls; without this you arrow off-screen).
+    useEffect(() => {
+      if (open) menuRef.current?.querySelector<HTMLElement>(".cmd-item.active")?.scrollIntoView({ block: "nearest" });
+    }, [clampedSel, open]);
 
     const setTextAndResize = (v: string) => setText(v); // height handled by the effect
     const accept = (name: string) => {
@@ -1183,7 +1188,7 @@ const Composer = (function () {
         )}
         <div className="composer-input">
           {open && (
-            <div className="cmd-menu">
+            <div className="cmd-menu" ref={menuRef}>
               {suggestions.map((cmd, i) => (
                 <button
                   key={cmd.name}
