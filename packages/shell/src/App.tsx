@@ -1346,24 +1346,40 @@ function ResourcesModal(props: { r: ReturnType<typeof useResources>; inSession: 
           </>
         )}
 
-        {tab === "skills" && (
+        {tab === "skills" && (() => {
+          const skillItems = [...managed(d.skills), ...inherited(d.skills)];
+          return (
           <>
-            <div className="callout">To add skills, ask the agent to install them with a skill manager like <b>Tessl</b> or <b>skills.sh</b>.</div>
+            <div className="callout">
+              To add skills, ask the agent to install them with a skill manager like <b>Tessl</b> or <b>skills.sh</b>.
+              {" "}{isGlobal
+                ? "Global skills live in your agent store and load in every project."
+                : "Project skills live in this folder's .pi/skills; global skills (from your agent store) are inherited here."}
+            </div>
             {loading ? (
               <Loading label="Loading…" />
             ) : (
               <>
-                <ResourceGroup title="Active skills" items={[...managed(d.skills), ...inherited(d.skills)]} render={(s) => s.description ?? ""} scoped />
+                {skillItems.length === 0 && (
+                  <p className="muted">No skills installed {isGlobal ? "globally" : "for this project"} yet.</p>
+                )}
+                <ResourceGroup title="Active skills" items={skillItems} render={(s) => s.description ?? ""} scoped />
                 <ResourceGroup title="Prompt templates" items={[...managed(d.prompts), ...inherited(d.prompts)]} render={(p) => p.description ?? ""} scoped />
               </>
             )}
-            <div className="theme-section">Global skills folder</div>
-            <label className="tune-row">
-              <input type="checkbox" checked={!!r.config.shareAgentsDir} onChange={(e) => r.setShareAgents(e.target.checked)} />
-              <span>Use my <code>~/.agents</code> skills</span>
-            </label>
+            {isGlobal && (
+              <>
+                <div className="theme-section">Skills from your machine</div>
+                <label className="tune-row">
+                  <input type="checkbox" checked={!!r.config.shareAgentsDir} onChange={(e) => r.setShareAgents(e.target.checked)} />
+                  <span>Also load skills from <code>~/.agents</code></span>
+                </label>
+                <p className="conn-hint">A shared folder on your machine that some tools (Tessl, skills.sh) install skills into — turning this on makes them available across every project.</p>
+              </>
+            )}
           </>
-        )}
+          );
+        })()}
     </ModalShell>
   );
 }
