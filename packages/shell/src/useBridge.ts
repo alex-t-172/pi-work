@@ -64,6 +64,7 @@ export function useBridge() {
   const [recentFolders, setRecentFolders] = useState<string[]>([]);
   const [launcherFolder, setLauncherFolder] = useState<string | null>(null);
   const [launcherSessions, setLauncherSessions] = useState<SessionMeta[] | null>(null);
+  const [launcherGlobal, setLauncherGlobal] = useState(false); // showing the global-chat history launcher
   const [activeFolder, setActiveFolder] = useState<string | null>(null);
   const [globalMode, setGlobalMode] = useState(false);
 
@@ -406,10 +407,22 @@ export function useBridge() {
   useEffect(() => { void refreshRecent(); }, [refreshRecent]);
 
   const selectFolder = useCallback(async (folder: string) => {
+    setLauncherGlobal(false);
     setLauncherFolder(folder);
     setLauncherSessions(null); // loading
     try {
       setLauncherSessions(await window.piwork.listSessions(folder));
+    } catch {
+      setLauncherSessions([]);
+    }
+  }, []);
+  // Global-chat launcher: like a folder's history, but for the folderless global chat.
+  const selectGlobal = useCallback(async () => {
+    setLauncherFolder(null);
+    setLauncherGlobal(true);
+    setLauncherSessions(null);
+    try {
+      setLauncherSessions(await window.piwork.listGlobalSessions());
     } catch {
       setLauncherSessions([]);
     }
@@ -420,6 +433,7 @@ export function useBridge() {
   }, [selectFolder]);
   const backToFolders = useCallback(() => {
     setLauncherFolder(null);
+    setLauncherGlobal(false);
     setLauncherSessions(null);
   }, []);
 
@@ -600,7 +614,7 @@ export function useBridge() {
 
   return {
     connection, hello, items, streaming, activity, statuses, widgets, dialog, toasts, models, currentModel, thinkingLevel, setThinkingLevel, stderrLog, debugLog, login,
-    recentFolders, launcherFolder, launcherSessions, activeFolder, globalMode, startGlobal,
+    recentFolders, launcherFolder, launcherSessions, launcherGlobal, selectGlobal, activeFolder, globalMode, startGlobal,
     artifacts, artifactsOpen, setArtifactsOpen, lastArtifactKey, commands,
     sessionTree, treeOpen, setTreeOpen, openSessionTree, rewindTo, rewinding, injectedText,
     systemPrompt, fetchSystemPrompt,

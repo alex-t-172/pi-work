@@ -20,6 +20,7 @@ export interface PiworkApi {
   recentFolders(): Promise<string[]>;
   /** List a workspace's past sessions (for the launcher). */
   listSessions(workspace: string): Promise<Array<{ path: string; id: string; name?: string; firstMessage: string; messageCount: number; created: string; modified: string }>>;
+  listGlobalSessions(): Promise<Array<{ path: string; id: string; name?: string; firstMessage: string; messageCount: number; created: string; modified: string }>>;
   /** Load the persisted theme (or null for default). */
   getTheme(): Promise<unknown>;
   /** Persist the theme. */
@@ -89,6 +90,7 @@ const api: PiworkApi = {
   stopSession: () => ipcRenderer.invoke("piwork:stopSession"),
   recentFolders: () => ipcRenderer.invoke("piwork:recentFolders"),
   listSessions: (workspace) => ipcRenderer.invoke("piwork:listSessions", workspace),
+  listGlobalSessions: () => ipcRenderer.invoke("piwork:listGlobalSessions"),
   getTheme: () => ipcRenderer.invoke("piwork:getTheme"),
   setTheme: (theme) => ipcRenderer.send("piwork:setTheme", theme),
   listResources: (workspace) => ipcRenderer.invoke("piwork:listResources", workspace),

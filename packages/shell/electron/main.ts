@@ -300,6 +300,8 @@ ipcMain.handle("piwork:startSession", (_e, workspace: string, session?: string) 
 ipcMain.handle("piwork:startGlobalSession", (_e, session?: string) => startSessionFor(globalCwd(), session, { global: true }));
 ipcMain.handle("piwork:recentFolders", () => readRecent());
 ipcMain.handle("piwork:listSessions", (_e, workspace: string) => listSessions(workspace));
+// Past global-chat sessions (folderless), so the launcher can list/resume them like a folder's.
+ipcMain.handle("piwork:listGlobalSessions", () => listSessions(globalCwd()));
 
 // ── Resource manager (skills / plugins / extensions) ────────────────────────────
 // Shell config store (e.g. whether to share the host's ~/.agents skills into the sandbox).

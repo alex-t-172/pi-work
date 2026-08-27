@@ -17,6 +17,7 @@ export interface PiworkApi {
   stopSession(): Promise<void>;
   recentFolders(): Promise<string[]>;
   listSessions(workspace: string): Promise<SessionMeta[]>;
+  listGlobalSessions(): Promise<SessionMeta[]>;
   getTheme(): Promise<unknown>;
   setTheme(theme: unknown): void;
   listResources(workspace: string): Promise<ResourceList>;
