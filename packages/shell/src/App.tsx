@@ -1386,7 +1386,7 @@ function ResourceGroup({ title, items, render, scoped }: { title: string; items:
       <div className="theme-section">{title}</div>
       {items.map((i) => (
         <div key={`${i.scope}:${i.name}:${i.path ?? ""}`} className="res-row">
-          <div className="res-main"><span className="res-name">{i.name}</span><span className="res-desc">{render(i)}</span></div>
+          <div className="res-main"><span className="res-name">{i.name}</span><span className="res-desc" title={render(i)}>{render(i)}</span></div>
           {scoped && <ScopeBadge scope={i.scope ?? "project"} />}
         </div>
       ))}
