@@ -306,7 +306,7 @@ ipcMain.handle("piwork:listGlobalSessions", () => listSessions(globalCwd()));
 // ── Resource manager (skills / plugins / extensions) ────────────────────────────
 // Shell config store (e.g. whether to share the host's ~/.agents skills into the sandbox).
 const CONFIG_FILE = path.join(os.homedir(), ".piwork", "config.json");
-function getConfig(): { shareAgentsDir?: boolean; braveApiKey?: string } {
+function getConfig(): { shareAgentsDir?: boolean; braveApiKey?: string; seededBuiltins?: string[] } {
   try { return JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8")); } catch { return {}; }
 }
 // Extra env for the session container. The Brave Search API key (optional) is passed to the
@@ -430,18 +430,51 @@ function readModelsJson(mount: { agentHostDir?: string; agentVolume?: string }):
 // Default-installed but fully removable in Customise — baking is delivery, not activation.
 // Single-sourced from built-ins.json (the manifest the built-ins-load test also checks), so the
 // list lives in ONE place. Adding a built-in = one entry there + a Dockerfile bake step.
-const DEFAULT_SUITE_PACKAGES = BUILT_INS.map((b) => b.source);
+const DEFAULT_BUILTINS = BUILT_INS as Array<{ name: string; source: string }>;
 let storeProvisioned = false;
-// Seed a FRESH agent store so a first run has Piwork's built-in features with zero manual setup.
-// Only writes when there's no settings.json yet — never clobbers an existing/user-edited store
-// (so removing a default in Customise sticks). Runs once per app launch.
+// Keep the agent store's default built-ins in sync with the manifest, so a built-in we add in a
+// later version reaches EXISTING installs too — without ever re-adding one the user removed.
+//
+// A `seededBuiltins` set (host config) records every default we've offered. A default is added to
+// the store only the first time it appears (its name isn't in the set yet); after that it's the
+// user's to keep or remove in Customise, and removal sticks. Cases:
+//   - Fresh store (no settings.json): seed all current defaults.
+//   - Existing store, first run of this logic (no seeded set yet): grandfather — record the
+//     current defaults as seeded WITHOUT adding, since we can't tell a deliberate removal from a
+//     never-had. Only genuinely NEW built-ins (added later) get merged in.
+// Runs once per app launch.
 function ensureStoreProvisioned(mount: { agentHostDir?: string; agentVolume?: string }): void {
   if (storeProvisioned) return;
   try {
-    if (!readAgentText(mount, "settings.json").trim()) {
-      const w = writeAgentText(mount, "settings.json", JSON.stringify({ packages: DEFAULT_SUITE_PACKAGES }, null, 2));
-      log(w.ok ? "provisioned fresh agent store with the built-in Suite" : `store provisioning failed: ${w.error}`);
+    const cfg = getConfig();
+    const seeded = new Set(cfg.seededBuiltins ?? []);
+    const hadSeededSet = cfg.seededBuiltins !== undefined;
+    const existing = readAgentText(mount, "settings.json").trim();
+
+    if (!existing) {
+      writeAgentText(mount, "settings.json", JSON.stringify({ packages: DEFAULT_BUILTINS.map((b) => b.source) }, null, 2));
+      DEFAULT_BUILTINS.forEach((b) => seeded.add(b.name));
+      log("provisioned fresh agent store with the built-in extensions");
+    } else if (!hadSeededSet) {
+      // Grandfather an existing store: mark current defaults seen, don't touch its packages.
+      DEFAULT_BUILTINS.forEach((b) => seeded.add(b.name));
+      log("existing store: recorded current built-ins as seeded (no changes)");
+    } else {
+      const settings = JSON.parse(existing) as { packages?: string[] };
+      const pkgs = Array.isArray(settings.packages) ? settings.packages : [];
+      const added: string[] = [];
+      for (const b of DEFAULT_BUILTINS) {
+        if (seeded.has(b.name)) continue; // already offered → user's call to keep/remove
+        seeded.add(b.name);
+        if (!pkgs.includes(b.source)) { pkgs.push(b.source); added.push(b.name); }
+      }
+      if (added.length) {
+        settings.packages = pkgs;
+        writeAgentText(mount, "settings.json", JSON.stringify(settings, null, 2));
+        log(`added new built-ins to existing store: ${added.join(", ")}`);
+      }
     }
+    setConfig({ seededBuiltins: [...seeded] });
     storeProvisioned = true;
   } catch (e) {
     log(`store provisioning error: ${String(e)}`); // leave unprovisioned → retry next session
