@@ -52,6 +52,9 @@ export function useBridge() {
   // connection dropped). We keep the session context and offer/auto-do a reconnect instead
   // of silently bouncing to home. intentionalEnd distinguishes a user-triggered End.
   const [dropped, setDropped] = useState(false);
+  // Bumped when the agent finishes a turn, so the Files panel re-reads the workspace (the agent
+  // may have added/changed/removed files) without the user hitting a manual refresh.
+  const [turnTick, setTurnTick] = useState(0);
   // A blocking session-start failure (docker missing / daemon down / image not built), shown
   // persistently in the session screen — not just a transient toast.
   const [startError, setStartError] = useState<string | null>(null);
@@ -229,6 +232,7 @@ export function useBridge() {
         case "agent_end":
           setStreaming(false);
           setActivity(null);
+          setTurnTick((n) => n + 1); // the agent finished a turn → the Files panel re-reads the folder
           finalizeAssistant();
           break;
         case "message_update": {
@@ -605,7 +609,7 @@ export function useBridge() {
     sessionTree, treeOpen, setTreeOpen, openSessionTree, rewindTo, rewinding, injectedText,
     systemPrompt, fetchSystemPrompt,
     mcpStatus, setMcpStatus,
-    dropped, reconnect, startError,
+    dropped, reconnect, startError, turnTick,
     fileOpenRequest,
     submit, abort, respondDialog, setModel,
     startLogin, chooseProvider, submitLoginInput, closeLogin,
