@@ -9,6 +9,10 @@ export function useConnectors() {
   const [mode, setMode] = useState<ConnectorMode>("global");
   const [folder, setFolder] = useState<string | undefined>(undefined);
   const [servers, setServers] = useState<McpServer[]>([]);
+  // Global connectors shown (read-only) when viewing a project: they're mounted into every
+  // session, so a global Notion is already active in this project — surface it as inherited
+  // rather than offering to set it up again.
+  const [inherited, setInherited] = useState<McpServer[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -16,6 +20,9 @@ export function useConnectors() {
   const load = useCallback(async (m: ConnectorMode, f?: string) => {
     const cfg = await window.piwork.getMcpServers(m, f);
     setServers(cfg.servers ?? []);
+    // In project scope, also load global connectors to show as inherited (none in global scope).
+    if (m === "project") setInherited((await window.piwork.getMcpServers("global", undefined)).servers ?? []);
+    else setInherited([]);
   }, []);
 
   const openFor = useCallback(async (m: ConnectorMode, f?: string) => {
@@ -64,5 +71,5 @@ export function useConnectors() {
     window.piwork.mcpRefreshStatus(mode, mode === "project" ? folder : undefined);
   }, [mode, folder]);
 
-  return { open, mode, folder, servers, busy, error, dirty, openFor, close, add, remove, connect, disconnect, reload };
+  return { open, mode, folder, servers, inherited, busy, error, dirty, openFor, close, add, remove, connect, disconnect, reload };
 }

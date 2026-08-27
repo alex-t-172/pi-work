@@ -133,7 +133,7 @@ export default function App() {
         <div className="app-row">
         <ActivityRail tools={sessionTools} settings={settingsRail} />
         {filesOpen && filesRoot && (
-          <FilesPanel initialDir={filesRoot} floor={filesRoot} openPath={openFile?.path ?? null} onOpenFile={openFileAt} onClose={() => setFilesOpen(false)} />
+          <FilesPanel initialDir={filesRoot} floor={filesRoot} openPath={openFile?.path ?? null} onOpenFile={openFileAt} refreshKey={b.turnTick} onClose={() => setFilesOpen(false)} />
         )}
         <div className="app-col">
           <TopBar
@@ -424,22 +424,25 @@ function FilesPanel(props: {
   onOpenFile: (path: string) => void;
   openPath: string | null;
   onOpenFolder?: (dir: string) => void; // home mode: open the current folder as a sandbox
+  refreshKey?: number; // bumps when the agent finishes a turn → re-read the current folder
   onClose: () => void;
 }) {
   const [dir, setDir] = useState(props.initialDir);
   const [listing, setListing] = useState<{ entries: DirEntry[]; error?: string } | null>(null);
-  const [nonce, setNonce] = useState(0);
+  const lastDir = useRef(dir);
   useEffect(() => { setDir(props.initialDir); }, [props.initialDir]);
   useEffect(() => {
     let live = true;
-    setListing(null);
+    // Blank (show loading) only when the folder actually changed — not on a background
+    // auto-refresh (refreshKey bump after a turn), so it re-reads in place without flicker.
+    if (lastDir.current !== dir) { setListing(null); lastDir.current = dir; }
     window.piwork.listDir(dir || undefined).then((l) => {
       if (!live) return;
       setListing({ entries: l.entries, error: l.error });
       if (!dir && l.path) setDir(l.path); // adopt the resolved home path
     });
     return () => { live = false; };
-  }, [dir, nonce]);
+  }, [dir, props.refreshKey]);
 
   // Breadcrumb from absolute segments, floored (in-session can't go above the workspace).
   const absParts = dir.split("/").filter(Boolean);
@@ -454,7 +457,6 @@ function FilesPanel(props: {
       <header>
         <strong>Files</strong>
         <div className="spacer" />
-        <button className="secondary" onClick={() => setNonce((n) => n + 1)} title="Refresh">⟳</button>
         <button onClick={props.onClose} title="Close panel">✕</button>
       </header>
       {props.onOpenFolder && dir && (
@@ -1452,7 +1454,9 @@ function ConnectorsModal(props: { c: ReturnType<typeof useConnectors>; inSession
   const [customOpen, setCustomOpen] = useState(false);
   const [customInitial, setCustomInitial] = useState<{ label?: string; url?: string; needsApp?: boolean } | undefined>(undefined);
   const statusOf = (name: string) => props.status.find((s) => s.name === name);
-  const configuredNames = new Set(c.servers.map((s) => s.name));
+  // Presets exclude anything already configured here OR inherited from global (a global Notion
+  // is already active in this project — don't offer to set it up again).
+  const configuredNames = new Set([...c.servers, ...c.inherited].map((s) => s.name));
 
   // A connector row: shows connection state + Connect/Disconnect (OAuth) and Remove.
   const Row = ({ s }: { s: McpServer }) => {
@@ -1490,6 +1494,25 @@ function ConnectorsModal(props: { c: ReturnType<typeof useConnectors>; inSession
           <>
             <div className="theme-section">Configured</div>
             {c.servers.map((s) => <Row key={s.name} s={s} />)}
+          </>
+        )}
+
+        {c.inherited.length > 0 && (
+          <>
+            <div className="theme-section">Inherited from global</div>
+            {c.inherited.map((s) => {
+              const st = statusOf(s.name);
+              const connected = st?.status === "authenticated";
+              return (
+                <div key={s.name} className="res-row">
+                  <div className="res-main">
+                    <span className="res-name">{s.label ?? s.name}</span>
+                    <span className="res-desc">{s.url ?? s.command ?? ""}{connected ? " · connected" : ""} · <span className="muted">available in every project</span></span>
+                  </div>
+                  <ScopeBadge scope="user" />
+                </div>
+              );
+            })}
           </>
         )}
 
@@ -1690,9 +1713,9 @@ function ModelAccountModal(props: {
 // Edit the agent's instructions / system prompt — the same files the agent can edit itself,
 // with a nice editor. agents = AGENTS.md, append = APPEND_SYSTEM.md, replace = SYSTEM.md.
 const INSTR_KINDS = [
-  { key: "agents", label: "Instructions", hint: "Instructions and conventions for the agent (AGENTS.md)." },
-  { key: "append", label: "Append to prompt", hint: "Appended to the system prompt (APPEND_SYSTEM.md)." },
-  { key: "replace", label: "Replace prompt", hint: "Replaces the base system prompt (SYSTEM.md)." },
+  { key: "agents", label: "Instructions", hint: "Instructions and conventions for the agent (AGENTS.md)" },
+  { key: "append", label: "Append to prompt", hint: "Appended to the base system prompt (APPEND_SYSTEM.md)" },
+  { key: "replace", label: "Replace prompt", hint: "Replaces the base system prompt (SYSTEM.md)" },
 ];
 // Instructions editor — a SECTION inside the Skills/extensions modal (it's all agent-shaping).
 // scope + folder come from the modal's own scope switch.
@@ -1721,7 +1744,7 @@ function InstructionsSection(props: { scope: "global" | "project"; folder?: stri
           <button key={k.key} className={`thinking-lv${kind === k.key ? " active" : ""}`} onClick={() => setKind(k.key)}>{k.label}</button>
         ))}
       </div>
-      <div className="muted">{active.hint}</div>
+      <div className="muted">{active.hint} {scope === "project" ? "for this project only." : "for every project."}</div>
       <textarea
         className="instr-editor"
         value={content}
