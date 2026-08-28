@@ -65,6 +65,9 @@ export function useBridge() {
   const [rewinding, setRewinding] = useState(false);
   const [injectedText, setInjectedText] = useState<{ text: string; nonce: number } | null>(null);
   const [recentFolders, setRecentFolders] = useState<string[]>([]);
+  // The most recent session overall (a folder session or the global chat), for the home
+  // "Resume previous session" shortcut. Written host-side whenever any session starts.
+  const [resumeTarget, setResumeTarget] = useState<{ kind: "folder"; folder: string } | { kind: "global" } | null>(null);
   const [launcherFolder, setLauncherFolder] = useState<string | null>(null);
   const [launcherSessions, setLauncherSessions] = useState<SessionMeta[] | null>(null);
   const [launcherGlobal, setLauncherGlobal] = useState(false); // showing the global-chat history launcher
@@ -407,6 +410,7 @@ export function useBridge() {
   // ── launcher actions ─────────────────────────────────────────────────────────
   const refreshRecent = useCallback(async () => {
     try { setRecentFolders(await window.piwork.recentFolders()); } catch { /* ignore */ }
+    try { setResumeTarget(await window.piwork.lastSession()); } catch { /* ignore */ }
   }, []);
   useEffect(() => { void refreshRecent(); }, [refreshRecent]);
 
@@ -486,8 +490,10 @@ export function useBridge() {
       setConnection("error");
       setStartError(res.error ?? "Couldn't start the session.");
       pushToast(res.error ?? "Couldn't start the session.", "error");
+    } else {
+      void refreshRecent(); // refresh the resume target (now the global chat)
     }
-  }, [pushToast, resetSessionState]);
+  }, [pushToast, refreshRecent, resetSessionState]);
 
   // End the session (kill the sandbox), then choose where to land.
   const endSession = useCallback(async () => {
@@ -520,6 +526,12 @@ export function useBridge() {
     await endSession();
     await selectGlobal();
   }, [endSession, selectGlobal]);
+  // One-click resume of whatever you were last in — a folder session or the global chat.
+  const resumeLast = useCallback(() => {
+    if (!resumeTarget) return;
+    if (resumeTarget.kind === "global") void startGlobal("recent");
+    else void startWith(resumeTarget.folder, "recent");
+  }, [resumeTarget, startGlobal, startWith]);
 
   // Run a `!command` in the sandbox (Pi's RPC bash) and show it as a terminal item in chat.
   // Output is included in the agent's context (like a terminal `!`), so the agent sees it too.
@@ -623,7 +635,7 @@ export function useBridge() {
 
   return {
     connection, hello, items, streaming, activity, statuses, widgets, dialog, toasts, models, currentModel, thinkingLevel, setThinkingLevel, stderrLog, debugLog, login,
-    recentFolders, launcherFolder, launcherSessions, launcherGlobal, selectGlobal, activeFolder, globalMode, startGlobal,
+    recentFolders, resumeTarget, resumeLast, launcherFolder, launcherSessions, launcherGlobal, selectGlobal, activeFolder, globalMode, startGlobal,
     artifacts, artifactsOpen, setArtifactsOpen, lastArtifactKey, commands,
     sessionTree, treeOpen, setTreeOpen, openSessionTree, rewindTo, rewinding, injectedText,
     systemPrompt, fetchSystemPrompt,

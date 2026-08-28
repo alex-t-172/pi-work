@@ -222,6 +222,8 @@ export default function App() {
             />
             <Launcher
               recentFolders={b.recentFolders}
+              resume={b.resumeTarget}
+              onResume={b.resumeLast}
               folder={b.launcherFolder}
               global={b.launcherGlobal}
               sessions={b.launcherSessions}
@@ -290,6 +292,8 @@ function relTime(iso: string): string {
 
 function Launcher(props: {
   recentFolders: string[];
+  resume: { kind: "folder"; folder: string } | { kind: "global" } | null;
+  onResume: () => void;
   folder: string | null;
   global?: boolean;
   sessions: SessionMeta[] | null;
@@ -333,12 +337,16 @@ function Launcher(props: {
         <div className="launcher-body">
           <h2>Work locally, stay in control</h2>
           <p className="muted">Pick a folder for the agent to work in, or start a global chat with no file access.</p>
-          {props.recentFolders.length > 0 && (
+          {props.resume && (
             // One-click back into where you were — the sandbox closes on sleep and drops you
-            // here, and this saves the folder→session hop to get back to the last session.
-            <button className="resume-cta" onClick={() => props.onStart(props.recentFolders[0], "recent")} title={props.recentFolders[0]}>
+            // here, and this saves the folder→session (or →global-chat) hop to get back in.
+            <button
+              className="resume-cta"
+              onClick={props.onResume}
+              title={props.resume.kind === "folder" ? props.resume.folder : "Global chat"}
+            >
               <span className="resume-main">↩ Resume previous session</span>
-              <span className="resume-sub">{basename(props.recentFolders[0])}</span>
+              <span className="resume-sub">{props.resume.kind === "folder" ? basename(props.resume.folder) : "Global chat (no folder)"}</span>
             </button>
           )}
           <div className="folder-actions">

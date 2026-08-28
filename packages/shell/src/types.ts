@@ -16,6 +16,7 @@ export interface PiworkApi {
   startGlobalSession(session?: string): Promise<{ ok: boolean; error?: string }>;
   stopSession(): Promise<void>;
   recentFolders(): Promise<string[]>;
+  lastSession(): Promise<{ kind: "folder"; folder: string } | { kind: "global" } | null>;
   listSessions(workspace: string): Promise<SessionMeta[]>;
   listGlobalSessions(): Promise<SessionMeta[]>;
   getTheme(): Promise<unknown>;

@@ -18,6 +18,8 @@ export interface PiworkApi {
   stopSession(): Promise<void>;
   /** Recently opened folders (most recent first). */
   recentFolders(): Promise<string[]>;
+  /** The single most recent session across folders and the global chat (for one-click resume). */
+  lastSession(): Promise<{ kind: "folder"; folder: string } | { kind: "global" } | null>;
   /** List a workspace's past sessions (for the launcher). */
   listSessions(workspace: string): Promise<Array<{ path: string; id: string; name?: string; firstMessage: string; messageCount: number; created: string; modified: string }>>;
   listGlobalSessions(): Promise<Array<{ path: string; id: string; name?: string; firstMessage: string; messageCount: number; created: string; modified: string }>>;
@@ -89,6 +91,7 @@ const api: PiworkApi = {
   startGlobalSession: (session) => ipcRenderer.invoke("piwork:startGlobalSession", session),
   stopSession: () => ipcRenderer.invoke("piwork:stopSession"),
   recentFolders: () => ipcRenderer.invoke("piwork:recentFolders"),
+  lastSession: () => ipcRenderer.invoke("piwork:lastSession"),
   listSessions: (workspace) => ipcRenderer.invoke("piwork:listSessions", workspace),
   listGlobalSessions: () => ipcRenderer.invoke("piwork:listGlobalSessions"),
   getTheme: () => ipcRenderer.invoke("piwork:getTheme"),

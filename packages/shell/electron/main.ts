@@ -149,6 +149,27 @@ function addRecent(workspace: string) {
   }
 }
 
+// The single most recent session across folders AND the global chat, so home can offer a
+// one-click "Resume" pointing at whatever you were last in (a folder session or a global chat).
+const LAST_SESSION_FILE = path.join(os.homedir(), ".piwork", "last-session.json");
+type LastSession = { kind: "folder"; folder: string } | { kind: "global" };
+function readLastSession(): LastSession | null {
+  try {
+    const o = JSON.parse(fs.readFileSync(LAST_SESSION_FILE, "utf8"));
+    if (o?.kind === "global") return { kind: "global" };
+    if (o?.kind === "folder" && typeof o.folder === "string") return { kind: "folder", folder: o.folder };
+  } catch { /* none yet */ }
+  return null;
+}
+function writeLastSession(v: LastSession) {
+  try {
+    fs.mkdirSync(path.dirname(LAST_SESSION_FILE), { recursive: true });
+    fs.writeFileSync(LAST_SESSION_FILE, JSON.stringify(v, null, 2));
+  } catch (e) {
+    log(`could not write last session: ${String(e)}`);
+  }
+}
+
 /** Run pi-host "list" mode as a short-lived container; return this workspace's sessions. */
 function listSessions(workspace: string): Promise<unknown[]> {
   return new Promise((resolve) => {
@@ -270,6 +291,7 @@ async function startSessionFor(workspace: string, session?: string, opts?: { glo
     ensureStoreProvisioned(mount); // first-run: seed the built-in Suite into a fresh store
     lastAgent = { workspace, ...mount };
     if (!opts?.global) addRecent(workspace); // global chat isn't a folder
+    writeLastSession(opts?.global ? { kind: "global" } : { kind: "folder", folder: workspace });
     log(`starting ${opts?.global ? "GLOBAL " : ""}session: workspace=${workspace} session=${session ?? "new"} agentDir=${mount.agentHostDir ?? mount.agentVolume} suite=${DEV_SUITE_DIR ?? "(none)"}`);
     bridge.start({
       workspace,
@@ -299,6 +321,7 @@ ipcMain.handle("piwork:startSession", (_e, workspace: string, session?: string) 
 // Global chat: folderless (mount only the neutral global cwd → no host files), tool-restricted.
 ipcMain.handle("piwork:startGlobalSession", (_e, session?: string) => startSessionFor(globalCwd(), session, { global: true }));
 ipcMain.handle("piwork:recentFolders", () => readRecent());
+ipcMain.handle("piwork:lastSession", () => readLastSession());
 ipcMain.handle("piwork:listSessions", (_e, workspace: string) => listSessions(workspace));
 // Past global-chat sessions (folderless), so the launcher can list/resume them like a folder's.
 ipcMain.handle("piwork:listGlobalSessions", () => listSessions(globalCwd()));
