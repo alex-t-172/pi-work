@@ -167,7 +167,7 @@ declare global {
   }
 }
 
-export type ChatRole = "user" | "assistant" | "tool";
+export type ChatRole = "user" | "assistant" | "tool" | "system";
 
 export interface ChatItem {
   id: string;
@@ -214,7 +214,7 @@ export interface ModelInfo {
 export type Connection = "idle" | "starting" | "connected" | "exited" | "error";
 
 /** What the agent is doing right now (drives the live status indicator). */
-export type ActivityPhase = "working" | "thinking" | "responding" | "toolcall" | "tool";
+export type ActivityPhase = "working" | "thinking" | "responding" | "toolcall" | "tool" | "compacting" | "retrying";
 export interface Activity {
   phase: ActivityPhase;
   /** For the "tool" phase: the tool name being executed. */
@@ -224,4 +224,7 @@ export interface Activity {
   /** For the "toolcall" phase: accumulated size of streamed tool-call arguments, so a
    *  long "writing a big doc into a tool call" reads as active production, not a freeze. */
   bytes?: number;
+  /** For the "retrying" phase: which auto-retry attempt this is, out of how many. */
+  attempt?: number;
+  maxAttempts?: number;
 }

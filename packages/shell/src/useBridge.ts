@@ -11,6 +11,18 @@ const stripAnsi = (s: unknown): string => String(s ?? "").replace(ANSI_RE, "");
 // Mirrors piwork-ui's PIWORK_INTENT_SENTINEL. Extensions ride richer intents on `notify`
 // until they become first-class (once we own the shim). Kept in sync by convention.
 const PIWORK_INTENT_SENTINEL = "__piworkIntent__";
+
+// The chain of nodes from a session-tree root down to the given leaf (used to find the last
+// user message on the current branch, e.g. to retry it). Null if the leaf isn't found.
+function pathToLeaf(nodes: TreeNode[], leafId: string | null): TreeNode[] | null {
+  if (!leafId) return null;
+  for (const n of nodes) {
+    if (n.id === leafId) return [n];
+    const sub = pathToLeaf(n.children, leafId);
+    if (sub) return [n, ...sub];
+  }
+  return null;
+}
 function parsePiworkIntent(message: unknown): { kind: string; [k: string]: unknown } | null {
   if (typeof message !== "string" || message[0] !== "{") return null;
   try {
@@ -63,6 +75,17 @@ export function useBridge() {
   const [fileOpenRequest, setFileOpenRequest] = useState<{ rel: string; nonce: number } | null>(null);
   const [treeOpen, setTreeOpen] = useState(false);
   const [rewinding, setRewinding] = useState(false);
+  // Queued steer/follow-up messages Pi reports (queue_update), so the composer can show
+  // "N queued" instead of a message vanishing into thin air after Alt+Enter.
+  const [queue, setQueue] = useState<{ steering: string[]; followUp: string[] }>({ steering: [], followUp: [] });
+  // A turn that ended in failure after Pi's auto-retries gave up (e.g. the connection dropped).
+  // Drives an inline Retry affordance; cleared when a new turn starts.
+  const [turnError, setTurnError] = useState<string | null>(null);
+  const retryPending = useRef(false); // Retry clicked → fetching the tree to find the last user msg
+  const resendAfterRewind = useRef<string | null>(null); // text to resend once the retry rewind lands
+  // rewindTo is defined below the message-subscription effect; a ref lets the effect call it
+  // without a forward reference in its dependency array.
+  const rewindToRef = useRef<((id: string, prefill?: string) => void) | null>(null);
   const [injectedText, setInjectedText] = useState<{ text: string; nonce: number } | null>(null);
   const [recentFolders, setRecentFolders] = useState<string[]>([]);
   const [launcherFolder, setLauncherFolder] = useState<string | null>(null);
@@ -222,6 +245,7 @@ export function useBridge() {
       switch (p.type) {
         case "agent_start":
           setStreaming(true);
+          setTurnError(null); // a fresh turn clears any prior failure banner
           setActivity({ phase: "working", since: Date.now() });
           break;
         case "message_end":
@@ -231,10 +255,43 @@ export function useBridge() {
           if (p.message?.role === "assistant") finalizeAssistant();
           break;
         case "agent_end":
+          // willRetry === the turn failed but Pi will auto-retry it. Don't tear the stream
+          // down (no "done" flicker); auto_retry_start keeps the pill in a retrying state.
+          if (p.willRetry) break;
           setStreaming(false);
           setActivity(null);
           setTurnTick((n) => n + 1);
           finalizeAssistant();
+          break;
+        // Pi paused the turn to summarize history down to fit the context window. Without a
+        // distinct phase this reads as a multi-minute "Working…" freeze.
+        case "compaction_start":
+          setActivity({ phase: "compacting", since: Date.now() });
+          break;
+        case "compaction_end":
+          // Leave a marker in the transcript so the pause is explained in-history (and because
+          // people often choose to restart a session after a compaction).
+          if (!p.aborted) {
+            setItems((prev) => [...prev, { id: nextId(), role: "system", text: "Context compacted to fit the model's window." }]);
+          }
+          setActivity((a) => (a ? { phase: "working", since: Date.now() } : a));
+          break;
+        // The model request failed (usually a flaky connection) and Pi is retrying it. Surface
+        // the attempt count instead of a stalled "Responding…".
+        case "auto_retry_start":
+          setActivity({ phase: "retrying", since: Date.now(), attempt: p.attempt, maxAttempts: p.maxAttempts });
+          break;
+        case "auto_retry_end":
+          if (p.success) setActivity((a) => (a ? { phase: "working", since: Date.now() } : a));
+          else setTurnError(typeof p.finalError === "string" && p.finalError ? p.finalError : "The connection dropped before the turn could finish.");
+          break;
+        // Queued steer/follow-up messages (Alt+Enter). Mirror them so the composer can show them.
+        case "queue_update":
+          setQueue({ steering: Array.isArray(p.steering) ? p.steering : [], followUp: Array.isArray(p.followUp) ? p.followUp : [] });
+          break;
+        // Keep the thinking-level control in sync if it changes server-side (some models force one).
+        case "thinking_level_changed":
+          if (typeof p.level === "string") setThinkingLevelState(p.level);
           break;
         case "message_update": {
           const ev = p.assistantMessageEvent;
@@ -333,8 +390,22 @@ export function useBridge() {
         case "systemPrompt":
           setSystemPrompt(String(p.prompt ?? ""));
           break;
-        case "sessionTree":
-          setSessionTree({ tree: (p.tree as TreeNode[]) ?? [], leaf: (p.leaf as string | null) ?? null });
+        case "sessionTree": {
+          const tree = (p.tree as TreeNode[]) ?? [];
+          const leaf = (p.leaf as string | null) ?? null;
+          setSessionTree({ tree, leaf });
+          // Retry flow: we fetched the tree quietly (not to open the panel) to find the user's
+          // last message, then rewind to it and resend it once the rewind lands.
+          if (retryPending.current) {
+            retryPending.current = false;
+            const path = pathToLeaf(tree, leaf) ?? [];
+            const lastUser = [...path].reverse().find((n) => n.type === "message" && n.role === "user");
+            if (lastUser) {
+              resendAfterRewind.current = lastUser.text ?? lastUser.preview ?? "";
+              rewindToRef.current?.(lastUser.id); // no prefill — we resend on success
+            }
+            break; // don't open the panel
+          }
           setTreeOpen(true);
           if (rewindInFlight.current) {
             // pi-host only re-emits the tree on a SUCCESSFUL rewind (not on cancel), so
@@ -349,8 +420,15 @@ export function useBridge() {
             rewindInFlight.current = false;
             pendingPrefill.current = null;
             setRewinding(false);
+            // A Retry resends the user's last message automatically once we're back at it.
+            if (resendAfterRewind.current != null) {
+              const text = resendAfterRewind.current;
+              resendAfterRewind.current = null;
+              if (text.trim()) setTimeout(() => submitRef.current?.(text, "auto"), 0);
+            }
           }
           break;
+        }
         case "artifact": {
           const key = String(p.key ?? "default");
           if (typeof p.file === "string" && p.file) {
@@ -559,6 +637,10 @@ export function useBridge() {
     },
     [streaming, activeFolder, pushToast, runBash],
   );
+  // The message-subscription effect (mounted once) needs the current `submit` to resend on a
+  // Retry; a ref keeps it fresh without re-subscribing.
+  const submitRef = useRef(submit);
+  submitRef.current = submit;
 
   const openSessionTree = useCallback(() => window.piwork.send({ id: "tree", type: "prompt", message: "/piwork-tree" }), []);
   // Ask pi-host for the composed system prompt (arrives via the "systemPrompt" intent).
@@ -574,6 +656,17 @@ export function useBridge() {
     setTimeout(() => { // safety: if no fresh tree arrives (e.g. rewind cancelled), don't hang/prefill
       if (rewindInFlight.current) { rewindInFlight.current = false; pendingPrefill.current = null; setRewinding(false); }
     }, 6000);
+  }, []);
+  rewindToRef.current = rewindTo; // keep the effect's forward-ref caller current
+
+  // Resume a turn that failed after Pi's retries gave up: fetch the tree, rewind to the user's
+  // last message, and resend it (the clean restart, one click). The work happens in the
+  // sessionTree handler once the tree arrives.
+  const retryLastTurn = useCallback(() => {
+    if (streamingRef.current) return;
+    setTurnError(null);
+    retryPending.current = true;
+    window.piwork.send({ id: "tree", type: "prompt", message: "/piwork-tree" });
   }, []);
 
   const abort = useCallback(() => window.piwork.send({ id: "abort", type: "abort" }), []);
@@ -624,6 +717,7 @@ export function useBridge() {
     systemPrompt, fetchSystemPrompt,
     mcpStatus, setMcpStatus,
     dropped, reconnect, startError, turnTick,
+    queue, turnError, retryLastTurn,
     fileOpenRequest,
     submit, abort, respondDialog, setModel,
     startLogin, chooseProvider, submitLoginInput, closeLogin,

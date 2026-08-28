@@ -117,6 +117,8 @@ button.secondary { background: transparent; }
 .model-picker { background: var(--panel); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; max-width: 260px; }
 .conn-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--live); margin-right: 5px; vertical-align: middle; }
 
+/* Small line above the composer noting queued follow-ups (Alt+Enter). */
+.queue-note { padding: 4px 12px; font-size: 12px; color: var(--muted); }
 .statusbar { display: flex; gap: 8px; padding: 6px 12px; background: var(--bg2); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
 .chip { font-size: 12px; color: var(--muted); background: var(--panel); border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; }
 .chip-live { color: var(--fg); display: inline-flex; align-items: center; gap: 6px; }
@@ -135,6 +137,9 @@ button.secondary { background: transparent; }
 .msg .role { font-size: 11px; color: var(--muted); text-transform: uppercase; margin-bottom: 3px; }
 .msg.user { align-self: flex-end; background: var(--user); padding: 8px 12px; border-radius: 10px; }
 .msg.assistant { align-self: flex-start; background: var(--panel); border: 1px solid var(--border); padding: 8px 12px; border-radius: 10px; width: fit-content; max-width: 100%; }
+/* In-transcript system marker, e.g. "Context compacted": centered, muted, with hairline rules. */
+.msg-notice { align-self: center; display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; margin: 2px 0; }
+.msg-notice::before, .msg-notice::after { content: ""; width: 28px; height: 1px; background: var(--border); }
 .body.muted { color: var(--muted); }
 .thinking { color: var(--muted); font-size: 13px; margin-bottom: 8px; border-left: 2px solid var(--border); padding-left: 8px; }
 .thinking summary { cursor: pointer; user-select: none; }
