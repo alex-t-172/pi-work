@@ -515,6 +515,11 @@ export function useBridge() {
     if (folder) await selectFolder(folder);
     else backToFolders();
   }, [activeFolder, endSession, selectFolder, backToFolders]);
+  // The global-chat analogue of endToSessions: leave the chat back to the list of past chats.
+  const endToGlobalSessions = useCallback(async () => {
+    await endSession();
+    await selectGlobal();
+  }, [endSession, selectGlobal]);
 
   // Run a `!command` in the sandbox (Pi's RPC bash) and show it as a terminal item in chat.
   // Output is included in the agent's context (like a terminal `!`), so the agent sees it too.
@@ -627,6 +632,6 @@ export function useBridge() {
     fileOpenRequest,
     submit, abort, respondDialog, setModel,
     startLogin, chooseProvider, submitLoginInput, closeLogin,
-    refreshRecent, pickFolder, selectFolder, backToFolders, startWith, endToHome, endToSessions,
+    refreshRecent, pickFolder, selectFolder, backToFolders, startWith, endToHome, endToSessions, endToGlobalSessions,
   };
 }
