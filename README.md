@@ -32,6 +32,9 @@ is to Claude Code.)
   read-only: the agent changes files, you look at the results.
 - **Sign in to models.** Connect Anthropic or another provider from inside the app. Piwork opens
   your browser for the sign-in and finishes the handshake for you, with nothing to copy and paste.
+  An Anthropic or OpenAI sign-in runs on your existing plan, so usage comes out of your Claude or
+  ChatGPT subscription rather than API credits, the same as Claude Code or Codex. Paste an API key
+  instead and that provider bills you per token.
 - **Connectors.** Add hosted services with an OAuth sign-in: Notion, Linear, Sentry, Stripe are
   one click; Slack needs a Slack app you register first. You can also add any other MCP server.
   This runs on the bundled [`pi-mcp-adapter`](https://pi.dev/packages/pi-mcp-adapter).
@@ -52,13 +55,13 @@ is to Claude Code.)
 - **Node 22.18 or newer.** Piwork runs `.ts` files directly, so `pi-host` needs no build step.
 - **A container runtime with a working `docker` command.** Docker Desktop, colima, Rancher
   Desktop, and OrbStack all work. If `docker` isn't on your `PATH` (Rancher's lives at
-  `~/.rd/bin/docker`), set `PIWORK_DOCKER=/path/to/docker`. On a low-powered machine, colima
-  or OrbStack are lighter than Docker Desktop, and the runtime's VM needs ~2 GB.
-- **~8 GB RAM and a few GB of free disk.** Inference runs in the cloud, so Piwork itself is
-  light: the sandbox image is ~1.4 GB on disk, and at runtime the app uses ~400 MB plus
-  ~150–250 MB per open session (each folder session is its own container). 4 GB is workable
-  for a single session with other apps kept light. The heavy exception is pointing Piwork at a
-  *local* model — that needs far more; a cloud model does not tax your machine.
+  `~/.rd/bin/docker`), set `PIWORK_DOCKER=/path/to/docker`. On a low-powered machine, colima and
+  OrbStack are lighter than Docker Desktop. Give the runtime's VM at least 2 GB.
+- **~8 GB RAM and a few GB of free disk.** The model runs in the cloud, so Piwork stays light on
+  your machine. The sandbox image is about 1.4 GB on disk. While running, the app uses around
+  400 MB, plus 150 to 250 MB for each open session (every folder session runs in its own
+  container). 4 GB is enough for one session if you keep other apps closed. A local model is the
+  one thing that needs a lot more; a cloud model barely touches your machine.
 - macOS is the main target for now.
 
 ## Quick start (dev build)
@@ -207,9 +210,9 @@ model) in [`packages/shell/scripts`](packages/shell/scripts).
   packages into the image instead; `pi-host` keeps its diagnostics on stderr.
 - **`ctx.ui` intents come from `bindExtensions`, not the factory.** Piwork augments the bound
   `uiContext` on the `AgentSession` prototype so replacement sessions inherit it.
-- **Git-ignored or externally-symlinked skills won't load.** Pi respects `.gitignore` when
-  scanning skills, and the sandbox can't follow a skill folder that symlinks outside the
-  workspace — so a skill manager's "managed" install can be invisible even though the files show
+- **Git-ignored or externally-symlinked skills won't load.** Pi honours `.gitignore` when it
+  scans for skills, and the sandbox can't follow a skill folder that's symlinked outside the
+  workspace. So a skill manager's "managed" install can be invisible even when the files show up
   in the Files panel. Vendor skills as real files under `.pi/skills` or `.agents/skills`.
 
 ## Credits
