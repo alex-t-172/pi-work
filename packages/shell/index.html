@@ -3,10 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- Locked-down CSP: no remote anything. All assets are bundled/inlined. -->
+    <!-- Locked-down CSP: no remote anything. All assets are bundled/inlined.
+         The sha256 hash whitelists exactly the viewer iframe's link-handling script
+         (VIEWER_LINK_SCRIPT in App.tsx): a srcdoc iframe inherits this parent CSP, and
+         'self' alone would block that inline script. Regenerate the hash if it changes. -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-src 'self'"
+      content="default-src 'none'; script-src 'self' 'sha256-gP198UKpxreoYdPFSI4JrGc33TdZiTE+/We/LMg7hXk='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-src 'self'"
     />
     <title>Piwork</title>
   </head>
