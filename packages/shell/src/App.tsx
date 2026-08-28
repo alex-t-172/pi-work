@@ -472,22 +472,18 @@ const VIEWER_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:
 // The viewer iframe is locked down (opaque origin + `default-src 'none'`), so a plain <a> click
 // would navigate it to a blocked URL and blank the pane. This tiny script intercepts clicks:
 // in-page #anchors scroll locally; everything else is handed to the shell via postMessage (the
-// CSP doesn't block postMessage — it's not a network fetch), which opens external URLs in the
+// CSP doesn't block postMessage, it's not a network fetch), which opens external URLs in the
 // browser and relative doc links back into this viewer.
-const VIEWER_LINK_SCRIPT = `(function(){
-  function scrollToId(id){ var el=document.getElementById(id)||document.getElementsByName(id)[0]; if(el){el.scrollIntoView({block:"start"});} return !!el; }
-  document.addEventListener("click",function(e){
-    var a=e.target&&e.target.closest?e.target.closest("a[href]"):null; if(!a) return;
-    var href=a.getAttribute("href"); if(!href) return;
-    e.preventDefault();
-    if(href.charAt(0)==="#"){ scrollToId(decodeURIComponent(href.slice(1))); return; }
-    parent.postMessage({__piworkViewerLink:true,href:href},"*");
-  });
-  window.addEventListener("load",function(){ if(window.__viewerScrollTo) scrollToId(window.__viewerScrollTo); });
-})();`;
+//
+// IMPORTANT: a srcdoc iframe inherits the PARENT document's CSP, and index.html sets
+// `script-src 'self'` (no unsafe-inline) — so this inline script only runs because its exact
+// bytes are whitelisted by a sha256 hash in index.html's CSP. If you edit the string below,
+// regenerate that hash (sha256, base64) and update index.html, or the viewer's links go dead.
+// The scroll target rides on a <body data-scroll-to> attribute so this script stays static.
+const VIEWER_LINK_SCRIPT = `(function(){var go=function(id){var el=document.getElementById(id)||document.getElementsByName(id)[0];if(el)el.scrollIntoView({block:"start"});};document.addEventListener("click",function(e){var a=e.target&&e.target.closest?e.target.closest("a[href]"):null;if(!a)return;var href=a.getAttribute("href");if(!href)return;e.preventDefault();if(href.charAt(0)==="#"){go(decodeURIComponent(href.slice(1)));return;}parent.postMessage({__piworkViewerLink:true,href:href},"*");});window.addEventListener("load",function(){var s=document.body.getAttribute("data-scroll-to");if(s)go(s);});})();`;
 function artifactSrcDoc(body: string, scrollTo?: string): string {
-  const scroll = scrollTo ? `<script>window.__viewerScrollTo=${JSON.stringify(scrollTo)}</script>` : "";
-  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${VIEWER_CSP}"><style>body{font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#16181d;background:#fff;margin:14px}pre{background:#f0f1f4;padding:10px;border-radius:6px;overflow:auto;white-space:pre-wrap;word-break:break-word}img{max-width:100%}</style></head><body>${body}${scroll}<script>${VIEWER_LINK_SCRIPT}</script></body></html>`;
+  const attr = scrollTo ? ` data-scroll-to="${scrollTo.replace(/[&"<>]/g, (c) => ({ "&": "&amp;", '"': "&quot;", "<": "&lt;", ">": "&gt;" }[c]!))}"` : "";
+  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${VIEWER_CSP}"><style>body{font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#16181d;background:#fff;margin:14px}pre{background:#f0f1f4;padding:10px;border-radius:6px;overflow:auto;white-space:pre-wrap;word-break:break-word}img{max-width:100%}</style></head><body${attr}>${body}<script>${VIEWER_LINK_SCRIPT}</script></body></html>`;
 }
 function escapeHtml(s: string): string {
   return s.replace(/[&<>]/g, (c) => (c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;"));
