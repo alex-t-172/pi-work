@@ -6,7 +6,6 @@
  * container, receive the handshake, stream a prompt, and round-trip a blocking
  * ctx.ui.select — proving the shell's bridge layer works before wiring the GUI.
  *
- * Reuses the proven local-Ollama config (see scripts/spike-a.mjs findings).
  * Requires: the piwork-sandbox image built, Docker up, host Ollama running.
  */
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";

@@ -48,26 +48,11 @@ export type ExtensionUiRequest =
 
 /** Methods that block on a host response (vs. fire-and-forget). */
 export const BLOCKING_UI_METHODS = ["select", "confirm", "input", "editor"] as const;
-export type BlockingUiMethod = (typeof BLOCKING_UI_METHODS)[number];
 
 export type ExtensionUiResponse =
   | { type: "extension_ui_response"; id: string; value: string }
   | { type: "extension_ui_response"; id: string; confirmed: boolean }
   | { type: "extension_ui_response"; id: string; cancelled: true };
-
-// ── Commands (host -> container). Mirror of the RpcCommand `type`s we drive. ────────
-export type BridgeCommandType =
-  | "prompt" | "steer" | "follow_up" | "abort"
-  | "get_state" | "get_messages" | "get_commands"
-  | "set_model" | "cycle_model" | "get_available_models"
-  | "set_thinking_level" | "cycle_thinking_level"
-  | "compact" | "new_session" | "switch_session" | "fork" | "clone"
-  | "set_session_name" | "get_session_stats";
-
-export interface BridgeCommandBase {
-  id?: string;
-  type: BridgeCommandType | (string & {});
-}
 
 // ── Type guards ─────────────────────────────────────────────────────────────────
 type AnyMsg = Record<string, unknown>;
@@ -77,9 +62,6 @@ export function isBridgeHello(m: unknown): m is BridgeHello {
 }
 export function isExtensionUiRequest(m: unknown): m is ExtensionUiRequest {
   return isObj(m) && m.type === "extension_ui_request" && typeof m.method === "string";
-}
-export function isExtensionUiResponse(m: unknown): m is ExtensionUiResponse {
-  return isObj(m) && m.type === "extension_ui_response" && typeof m.id === "string";
 }
 export function isResponse(m: unknown): m is { type: "response"; command: string; success: boolean; id?: string; data?: unknown; error?: string } {
   return isObj(m) && m.type === "response" && typeof m.command === "string";
