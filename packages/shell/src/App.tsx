@@ -54,6 +54,9 @@ export default function App() {
   const [artWidth, setArtWidth] = useState(520);
   const [filesOpen, setFilesOpen] = useState(false); // one shared drawer state across home/folder/session
   const [openFile, setOpenFile] = useState<FileContent | null>(null);
+  const [pendingScroll, setPendingScroll] = useState<string | undefined>(undefined); // anchor after a doc-link nav
+  const openFileRef = useRef<FileContent | null>(null);
+  openFileRef.current = openFile; // so the viewer-link listener resolves relatives against the current file
   // Connected/authorized providers = those with available models (+ the current one).
   const connectedProviders = useMemo(() => {
     const set = new Set<string>();
@@ -73,7 +76,7 @@ export default function App() {
   // produce a richer view (arrives as an artifact the viewer auto-selects). Falls back to
   // the base view when no renderer matches (silent) or offline.
   const openFileAt = (p: string) => {
-    window.piwork.readFile(p).then((f) => { setOpenFile(f); b.setArtifactsOpen(true); });
+    window.piwork.readFile(p).then((f) => { setOpenFile(f); setPendingScroll(undefined); b.setArtifactsOpen(true); });
     if (inSession && !b.globalMode && !b.streaming && b.activeFolder && p.startsWith(b.activeFolder)) {
       const rel = p.slice(b.activeFolder.length).replace(/^\/+/, "");
       if (rel) window.piwork.send({ type: "prompt", message: `/piwork-render-file ${rel}` });
@@ -82,6 +85,26 @@ export default function App() {
   // The drawer's open/closed persists across home ↔ folder ↔ session; only the previewed
   // file is context-specific, so clear it when the session context changes.
   useEffect(() => { setOpenFile(null); }, [inSession]);
+
+  // Links clicked inside the viewer iframe post their href up here (the iframe is sandboxed and
+  // can't navigate itself). External URLs open in the browser; a relative doc link (optionally
+  // with a #fragment) resolves against the open file's folder and loads into the viewer.
+  useEffect(() => {
+    const onMsg = (e: MessageEvent) => {
+      const d = e.data as { __piworkViewerLink?: boolean; href?: string } | null;
+      if (!d || !d.__piworkViewerLink || typeof d.href !== "string") return;
+      if (isExternalHref(d.href)) { if (/^https?:\/\//i.test(d.href)) window.piwork.openExternal(d.href); return; }
+      const cur = openFileRef.current;
+      const [rel, hash] = splitHash(d.href);
+      if (!cur?.path || !rel) return; // pure #anchors are handled inside the iframe
+      window.piwork.readFile(resolveFrom(cur.path, rel)).then((f) => {
+        if (f?.ok) { setOpenFile(f); setPendingScroll(hash || undefined); b.setArtifactsOpen(true); }
+      });
+    };
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // The agent presented a workspace file via show_artifact → open it in the viewer, host-side.
   useEffect(() => {
@@ -170,6 +193,7 @@ export default function App() {
             artifacts={b.artifacts}
             lastKey={b.lastArtifactKey}
             openFile={openFile}
+            scrollTo={pendingScroll}
             width={artWidth}
             onWidth={setArtWidth}
             onClose={() => b.setArtifactsOpen(false)}
@@ -185,7 +209,7 @@ export default function App() {
             <FilesPanel
               initialDir={b.launcherFolder ?? ""}
               openPath={openFile?.path ?? null}
-              onOpenFile={(p) => window.piwork.readFile(p).then(setOpenFile)}
+              onOpenFile={(p) => window.piwork.readFile(p).then((f) => { setOpenFile(f); setPendingScroll(undefined); })}
               onOpenFolder={(folder) => b.selectFolder(folder)}
               onClose={() => setFilesOpen(false)}
             />
@@ -215,6 +239,7 @@ export default function App() {
               artifacts={{}}
               lastKey={null}
               openFile={openFile}
+              scrollTo={pendingScroll}
               width={artWidth}
               onWidth={setArtWidth}
               onClose={() => setOpenFile(null)}
@@ -420,8 +445,25 @@ function LoginModal(props: {
 // with the iframe's sandbox="allow-scripts" (opaque origin, no same-origin access), this is
 // the design's CSP-locked, no-Node escape hatch.
 const VIEWER_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; script-src 'unsafe-inline'";
-function artifactSrcDoc(body: string): string {
-  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${VIEWER_CSP}"><style>body{font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#16181d;background:#fff;margin:14px}pre{background:#f0f1f4;padding:10px;border-radius:6px;overflow:auto;white-space:pre-wrap;word-break:break-word}img{max-width:100%}</style></head><body>${body}</body></html>`;
+// The viewer iframe is locked down (opaque origin + `default-src 'none'`), so a plain <a> click
+// would navigate it to a blocked URL and blank the pane. This tiny script intercepts clicks:
+// in-page #anchors scroll locally; everything else is handed to the shell via postMessage (the
+// CSP doesn't block postMessage — it's not a network fetch), which opens external URLs in the
+// browser and relative doc links back into this viewer.
+const VIEWER_LINK_SCRIPT = `(function(){
+  function scrollToId(id){ var el=document.getElementById(id)||document.getElementsByName(id)[0]; if(el){el.scrollIntoView({block:"start"});} return !!el; }
+  document.addEventListener("click",function(e){
+    var a=e.target&&e.target.closest?e.target.closest("a[href]"):null; if(!a) return;
+    var href=a.getAttribute("href"); if(!href) return;
+    e.preventDefault();
+    if(href.charAt(0)==="#"){ scrollToId(decodeURIComponent(href.slice(1))); return; }
+    parent.postMessage({__piworkViewerLink:true,href:href},"*");
+  });
+  window.addEventListener("load",function(){ if(window.__viewerScrollTo) scrollToId(window.__viewerScrollTo); });
+})();`;
+function artifactSrcDoc(body: string, scrollTo?: string): string {
+  const scroll = scrollTo ? `<script>window.__viewerScrollTo=${JSON.stringify(scrollTo)}</script>` : "";
+  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${VIEWER_CSP}"><style>body{font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#16181d;background:#fff;margin:14px}pre{background:#f0f1f4;padding:10px;border-radius:6px;overflow:auto;white-space:pre-wrap;word-break:break-word}img{max-width:100%}</style></head><body>${body}${scroll}<script>${VIEWER_LINK_SCRIPT}</script></body></html>`;
 }
 function escapeHtml(s: string): string {
   return s.replace(/[&<>]/g, (c) => (c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;"));
@@ -433,14 +475,53 @@ function htmlDocWithCsp(html: string): string {
   if (/<html[^>]*>/i.test(html)) return html.replace(/<html[^>]*>/i, (m) => `${m}<head>${meta}</head>`);
   return `<!doctype html><html><head>${meta}</head><body>${html}</body></html>`;
 }
-// Normalise a viewer document (file or artifact) into an iframe srcDoc + title.
-function fileSrcDoc(f: FileContent): string {
+// Normalise a viewer document (file or artifact) into an iframe srcDoc + title. `scrollTo` is an
+// anchor id to jump to once loaded (set when arriving via a doc link like `other.md#section`).
+function fileSrcDoc(f: FileContent, scrollTo?: string): string {
   if (f.kind === "image") return artifactSrcDoc(`<img src="${f.content}" alt="${escapeHtml(f.name)}">`);
   if (f.kind === "html") return htmlDocWithCsp(f.content);
-  if (f.kind === "markdown") return artifactSrcDoc(marked.parse(f.content) as string);
+  if (f.kind === "markdown") return artifactSrcDoc(mdToHtml(f.content), scrollTo);
   if (f.kind === "binary") return artifactSrcDoc(`<p style="color:#8b909a">Can't preview this file type (binary).</p>`);
   const note = f.truncated ? `<p style="color:#8b909a">Showing the first part of a large file.</p>` : "";
   return artifactSrcDoc(`${note}<pre>${escapeHtml(f.content)}</pre>`);
+}
+
+// Render viewer markdown with GitHub-style heading ids, so in-doc `#anchor` links have a target
+// to scroll to. (marked doesn't emit heading ids; we post-process rather than depend on a plugin.)
+function headingSlug(text: string): string {
+  return text.trim().toLowerCase().replace(/[^\w\s-]/g, "").replace(/\s/g, "-");
+}
+function decodeBasicEntities(s: string): string {
+  return s.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#0?39;|&#x27;/gi, "'");
+}
+function mdToHtml(md: string): string {
+  const html = marked.parse(md) as string;
+  const seen = new Map<string, number>();
+  return html.replace(/<(h[1-6])>([\s\S]*?)<\/\1>/g, (m, tag: string, inner: string) => {
+    const base = headingSlug(decodeBasicEntities(inner.replace(/<[^>]*>/g, "")));
+    if (!base) return m;
+    const n = seen.get(base) ?? 0;
+    seen.set(base, n + 1);
+    return `<${tag} id="${n === 0 ? base : `${base}-${n}`}">${inner}</${tag}>`;
+  });
+}
+// Split a link href into its path and (decoded) fragment. Resolve a relative link against the
+// directory of the currently-open file (host paths). External links keep a scheme or start `//`.
+function splitHash(href: string): [string, string] {
+  const i = href.indexOf("#");
+  return i >= 0 ? [href.slice(0, i), decodeURIComponent(href.slice(i + 1))] : [href, ""];
+}
+function isExternalHref(href: string): boolean {
+  return /^[a-z][\w+.-]*:/i.test(href) || href.startsWith("//");
+}
+function resolveFrom(baseFile: string, rel: string): string {
+  const parts = baseFile.replace(/\/[^/]*$/, "").split("/");
+  for (const seg of decodeURIComponent(rel).split("/")) {
+    if (seg === "" || seg === ".") continue;
+    if (seg === "..") { if (parts.length > 1) parts.pop(); }
+    else parts.push(seg);
+  }
+  return parts.join("/") || "/";
 }
 
 function humanSize(n: number): string {
@@ -629,6 +710,7 @@ function ArtifactsPane(props: {
   artifacts: Record<string, { title?: string; html?: string; markdown?: string }>;
   lastKey: string | null;
   openFile: FileContent | null;
+  scrollTo?: string; // anchor to jump to after a doc-link navigation (`other.md#section`)
   width: number;
   onWidth: (w: number) => void;
   onClose: () => void;
@@ -649,10 +731,10 @@ function ArtifactsPane(props: {
   let srcDoc: string | null = null;
   if (active === "file" && props.openFile) {
     title = props.openFile.name;
-    srcDoc = fileSrcDoc(props.openFile);
+    srcDoc = fileSrcDoc(props.openFile, props.scrollTo);
   } else if (active.startsWith("art:")) {
     const a = props.artifacts[active.slice(4)];
-    if (a) { title = a.title ?? "Artifact"; srcDoc = artifactSrcDoc(a.html ?? (a.markdown ? (marked.parse(a.markdown) as string) : "")); }
+    if (a) { title = a.title ?? "Artifact"; srcDoc = artifactSrcDoc(a.html ?? (a.markdown ? mdToHtml(a.markdown) : "")); }
   }
 
   // While dragging, the iframe below must not swallow the mouse: otherwise moving the cursor
