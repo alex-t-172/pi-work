@@ -173,6 +173,12 @@ export default function App() {
               <button className="primary" onClick={() => void b.reconnect()}>⟳ Reconnect</button>
             </div>
           )}
+          {b.turnError && !b.streaming && !b.dropped && (
+            <div className="reconnect-banner">
+              <span>⚠ {b.turnError}</span>
+              <button className="primary" onClick={b.retryLastTurn}>⟳ Retry</button>
+            </div>
+          )}
           <StatusBar statuses={b.statuses} streaming={b.streaming} activity={b.activity} onAbort={b.abort} />
           <Widgets lines={b.widgets.above} placement="above" />
           <Chat
@@ -184,6 +190,10 @@ export default function App() {
             onRetry={() => (b.globalMode ? b.startGlobal() : b.activeFolder ? b.startWith(b.activeFolder) : undefined)}
           />
           <Widgets lines={b.widgets.below} placement="below" />
+          {(() => {
+            const q = b.queue.followUp.length + b.queue.steering.length;
+            return q > 0 ? <div className="queue-note">{q} queued to send after this turn</div> : null;
+          })()}
           <Composer taRef={composerRef} streaming={b.streaming} disabled={b.connection !== "connected"} onSubmit={b.submit} commands={b.commands} injected={b.injectedText} canAttach={!b.globalMode && !!b.activeFolder} />
         </div>
         {showArtifacts && (
@@ -927,6 +937,11 @@ function activityLabel(activity: Activity | null): string {
     case "thinking": return "Thinking…";
     case "responding": return "Responding…";
     case "toolcall": return "Writing tool call…";
+    case "compacting": return "Compacting context…";
+    case "retrying":
+      return activity.attempt && activity.maxAttempts
+        ? `Connection issue, retrying (${activity.attempt} of ${activity.maxAttempts})…`
+        : "Connection issue, retrying…";
     case "tool": {
       const t = activity.label ? activity.label.split("__").pop()!.replace(/_/g, " ") : "";
       return t ? `Running ${t}…` : "Running a tool…";
@@ -1126,6 +1141,8 @@ function Message({ item, streamingLabel }: { item: ChatItem; streamingLabel?: st
   const thinkingHtml = useMemo(() => (item.thinking ? (marked.parse(item.thinking) as string) : ""), [item.thinking]);
 
   if (item.role === "tool") return item.userBash ? <BashMessage item={item} /> : <ToolMessage item={item} />;
+  // A lightweight in-transcript marker (e.g. "Context compacted"), centered and muted.
+  if (item.role === "system") return <div className="msg-notice">{item.text}</div>;
 
   return (
     <div className={`msg ${item.role} ${item.streaming ? "streaming" : ""}`}>
