@@ -52,7 +52,13 @@ is to Claude Code.)
 - **Node 22.18 or newer.** Piwork runs `.ts` files directly, so `pi-host` needs no build step.
 - **A container runtime with a working `docker` command.** Docker Desktop, colima, Rancher
   Desktop, and OrbStack all work. If `docker` isn't on your `PATH` (Rancher's lives at
-  `~/.rd/bin/docker`), set `PIWORK_DOCKER=/path/to/docker`.
+  `~/.rd/bin/docker`), set `PIWORK_DOCKER=/path/to/docker`. On a low-powered machine, colima
+  or OrbStack are lighter than Docker Desktop, and the runtime's VM needs ~2 GB.
+- **~8 GB RAM and a few GB of free disk.** Inference runs in the cloud, so Piwork itself is
+  light: the sandbox image is ~1.4 GB on disk, and at runtime the app uses ~400 MB plus
+  ~150–250 MB per open session (each folder session is its own container). 4 GB is workable
+  for a single session with other apps kept light. The heavy exception is pointing Piwork at a
+  *local* model — that needs far more; a cloud model does not tax your machine.
 - macOS is the main target for now.
 
 ## Quick start (dev build)
