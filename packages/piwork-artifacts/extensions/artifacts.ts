@@ -16,12 +16,12 @@ export default function (pi: ExtensionAPI) {
     name: "show_artifact",
     label: "Show artifact",
     description:
-      'Present a FINISHED artifact to the user in the side viewer — typically at the END of your turn, as an explicit "here\'s what I made". Prefer `file`: pass the workspace-relative path of a file you produced (a report, document, HTML page, chart, image, CSV, …) and Piwork opens it in the viewer, rendered where possible. Otherwise pass inline `markdown` or `html` for rendered content you did not write to a file. Use this to present completed results the user should read or keep visible — not intermediate steps or progress.',
+      "Present a finished result in the side viewer, usually at the end of a turn. Prefer `file`: the workspace-relative path of a file you produced (report, HTML page, chart, image, CSV, …), which Piwork renders where it can. Otherwise pass inline `markdown` or `html`. Use it for results the user should read or keep visible, not progress updates.",
     parameters: {
       type: "object",
       properties: {
         title: { type: "string", description: "Short title for the panel." },
-        file: { type: "string", description: "Workspace-relative path of a file you made, to present (preferred)." },
+        file: { type: "string", description: "Workspace-relative path of a file to show (preferred)." },
         markdown: { type: "string", description: "Inline Markdown to render (when not presenting a file)." },
         html: { type: "string", description: "Inline HTML to render (alternative to markdown)." },
       },

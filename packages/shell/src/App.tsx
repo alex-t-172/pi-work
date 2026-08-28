@@ -15,7 +15,6 @@ import themeIcon from "./assets/rail/theme.png";
 import debugIcon from "./assets/rail/debug.png";
 import rewindIcon from "./assets/rail/rewind.png";
 
-// Curated presets installable in one click (sources are container-side suite paths).
 // Curated extensions you can install/remove in one click. The first four are also the defaults
 // (baked + auto-installed — this list lets you remove them); the rest are optional.
 const SUITE_PRESETS = [
@@ -23,7 +22,7 @@ const SUITE_PRESETS = [
   { name: "Artifacts", source: "/opt/piwork-suite/piwork-artifacts", dir: "piwork-artifacts", desc: "Present a finished file or view in the viewer" },
   { name: "Tasks", source: "/opt/piwork-suite/piwork-tasks", dir: "piwork-tasks", desc: "A task list the agent maintains, shown as a docked widget" },
   { name: "Web search", source: "/opt/piwork-suite/piwork-websearch", dir: "piwork-websearch", desc: "web_search + fetch_url (keyless, or Brave with a key)" },
-  { name: "Subagents", source: "/opt/pi-subagents", dir: "pi-subagents", desc: "Delegate work to subagents. Powerful, but adds ~2s to session startup." },
+  { name: "Subagents", source: "/opt/pi-subagents", dir: "pi-subagents", desc: "Delegate work to subagents. Adds ~2s to session startup." },
   { name: "Checkpoint", source: "/opt/piwork-suite/piwork-checkpoint", dir: "piwork-checkpoint", desc: "Git auto-commit before each turn (safety net)" },
 ];
 
@@ -109,8 +108,7 @@ export default function App() {
     return () => window.removeEventListener("focus", onFocus);
   }, [b.dropped, b.reconnect]);
 
-  // Settings zone: shared by home & session. Model/account + Theme + Debug all live on the
-  // rail now (variant C: the rail is the whole control surface, the top bar ≈ vanishes).
+  // Settings zone: shared by home & session. Model/account, Theme, and Debug all live on the rail.
   const settingsRail: RailItem[] = [
     { key: "model", iconUrl: modelsIcon, label: "Model", onClick: () => setShowModelAccount(true), title: "Model & account" },
     { key: "theme", iconUrl: themeIcon, label: "Theme", onClick: () => setShowTheme(true) },
@@ -621,10 +619,9 @@ function SessionTreePanel(props: { data: { tree: TreeNode[]; leaf: string | null
   );
 }
 
-// A resizable right-hand pane (split, not overlay) that shows ONE artifact at a time
-// full-height, with a selector to switch between them — a file viewer, not a stack of boxes.
-// The viewer pane: renders "a document" whose bytes come from EITHER an opened host file
-// OR an agent-pushed artifact. One surface, two sources; a selector switches between them.
+// A resizable right-hand viewer pane (split, not overlay) that shows ONE document full-height:
+// either an opened host file or an agent-pushed artifact. One surface, two sources; a selector
+// switches between them.
 function ArtifactsPane(props: {
   artifacts: Record<string, { title?: string; html?: string; markdown?: string }>;
   lastKey: string | null;
@@ -634,7 +631,7 @@ function ArtifactsPane(props: {
   onClose: () => void;
 }) {
   const artKeys = Object.keys(props.artifacts);
-  // Unified doc list: the open file (if any) first, then artifacts.
+  // The open file (if any) first, then artifacts.
   const entries = [
     ...(props.openFile ? [{ id: "file", label: `📄 ${props.openFile.name}` }] : []),
     ...artKeys.map((k) => ({ id: `art:${k}`, label: props.artifacts[k].title ?? k })),
@@ -720,12 +717,11 @@ function DebugDrawer(props: { debugLog: string[]; stderrLog: string[]; onClose: 
   );
 }
 
-// Left activity rail: the panels/tools that used to crowd the top bar. Icon column with
-// captions (friendly for non-devs), active-state highlighting. Item-driven so the home
-// screen and an in-session view each compose their own set; also the intended dock for the
+// Left activity rail: an icon column with captions and active-state highlighting. Item-driven,
+// so the home screen and an in-session view each compose their own set; also the dock for the
 // Files panel and extension setWidget panels.
 type RailItem = { key: string; iconUrl?: string; iconNode?: React.ReactNode; label: string; onClick: () => void; active?: boolean; disabled?: boolean; title?: string; badge?: number };
-// Left activity rail, variant C: three visually-zoned groups top→bottom —
+// Three visually-zoned groups top→bottom —
 //   1. Tools (files/skills/connect/docs/rewind),
 //   2. a divider, then Settings (model/account, theme, debug),
 //   3. a flexible spacer, then a pinned Home/exit anchor (in-session only).
@@ -753,9 +749,8 @@ function ActivityRail(props: { tools: RailItem[]; settings: RailItem[]; anchor?:
   );
 }
 
-// Variant C: the top bar is reduced to a non-interactive status line — a small context
-// label + a colored connection dot. No buttons: every control now lives on the rail.
-// One top bar for every screen — a stable frame. Order (left → right):
+// One top bar for every screen — a stable status frame, not a control surface (every control
+// lives on the rail): a small context label + a colored connection dot. Order (left → right):
 //   Home  ·  <folder/context>  ·  live dot  ·  End session
 // Home is pinned LEFTMOST so it never moves between the folder screen and a session; on the
 // true home screen the slot is the "Piwork" brand instead (you're already home). The ◀ back
@@ -824,8 +819,8 @@ function ModalShell(props: {
   );
 }
 
-// A Global / Project segmented switch used inside the Skills & Connect modals so scope is
-// chosen in one place (shared move #2). Project is disabled when there's no project context.
+// A Global / Project segmented switch used inside the Skills & Connect modals, so scope is
+// chosen in one place. Project is disabled when there's no project context.
 function ScopeSwitch(props: { scope: "global" | "project"; projectFolder?: string; onGlobal: () => void; onProject: (folder: string) => void }) {
   return (
     <div className="scope-switch">
@@ -957,7 +952,7 @@ function Chat(props: { items: ChatItem[]; connection: string; globalMode: boolea
         ) : props.globalMode ? (
           <div className="empty-global">
             <h3>Global chat</h3>
-            <p className="hint">A general agent chat with no file access. It can use your connectors and skills, and help customise Piwork itself.</p>
+            <p className="hint">A general agent chat with no file access. It can still use your connectors and skills.</p>
           </div>
         ) : (
           <div className="hint">Type a message to start.</div>
@@ -1069,7 +1064,6 @@ function Message({ item, streamingLabel }: { item: ChatItem; streamingLabel?: st
 }
 
 const Composer = (function () {
-  // forwardRef without importing the symbol name churn.
   return function Composer(props: {
     taRef: React.RefObject<HTMLTextAreaElement>;
     streaming: boolean;
@@ -1470,9 +1464,9 @@ function CustomConnectorForm(props: { onSave: (s: McpServer) => void; onCancel: 
             <div className="conn-field">
               <span>App credentials{props.initial?.needsApp ? "" : " (usually not needed)"}</span>
               <p className="conn-hint">
-                Most servers register automatically, so leave these blank. Some, like Slack, need an app you
+                Most servers register automatically — leave these blank. Some (like Slack) need an app you
                 register: create one, set its redirect URL to <code>{REDIRECT_URI}</code>, then paste its
-                Client ID and Secret here. A secret makes this a Global-only connector.
+                Client ID and Secret. A secret makes this a Global-only connector.
               </p>
               <input placeholder="Client ID" value={clientId} onChange={(e) => setClientId(e.target.value)} />
               <input type="password" placeholder="Client Secret" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} />
@@ -1594,9 +1588,6 @@ function ConnectorsModal(props: { c: ReturnType<typeof useConnectors>; inSession
   );
 }
 
-// Merged model + provider control (shared move #1): ONE entry point that both picks the
-// active model (from the connected providers' models, highlighting the current one) and
-// connects/manages providers. Reached from the rail's Settings zone (🧠 Model).
 // Add a model the pinned Pi SDK doesn't list yet (e.g. a just-released Opus) — writes it into
 // models.json under the chosen provider (reusing that provider's login) and reloads.
 function AddModel(props: { defaultProvider: string }) {
@@ -1682,6 +1673,9 @@ function AddProvider() {
 }
 
 const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh"];
+// Merged model + provider control: ONE entry point that both picks the active model (from the
+// connected providers' models, highlighting the current one) and connects/manages providers.
+// Reached from the rail's Settings zone (🧠 Model).
 function ModelAccountModal(props: {
   models: { provider: string; id: string }[];
   currentModel: { provider: string; id: string; reasoning?: boolean } | null;
@@ -1781,9 +1775,9 @@ function WebSearchKey(props: { braveKey?: string; onSave: (key: string) => void 
   return (
     <div className="websearch-key">
       <p className="conn-hint">
-        Web search works out of the box. For more reliable results, add a free{" "}
+        Web search works with no setup. For more reliable results, add a free{" "}
         <button className="link" onClick={() => window.piwork.openExternal("https://brave.com/search/api/")}>Brave Search API key</button>
-        {" "}(optional). Applies on the next session.
+        . Applies on the next session.
       </p>
       <div className="install-row">
         <input type="password" placeholder="Brave Search API key (optional)" value={val} onChange={(e) => setVal(e.target.value)} />

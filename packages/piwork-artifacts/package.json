@@ -1,7 +1,7 @@
 {
   "name": "piwork-artifacts",
   "version": "0.0.0",
-  "description": "Piwork built-in: a show_artifact tool the agent calls to present a file or rich HTML/Markdown in the viewer panel.",
+  "description": "A show_artifact tool that presents a file or rendered HTML/Markdown in the viewer.",
   "keywords": ["pi-package", "piwork"],
   "pi": {
     "extensions": ["./extensions"]

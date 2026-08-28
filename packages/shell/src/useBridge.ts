@@ -233,7 +233,7 @@ export function useBridge() {
         case "agent_end":
           setStreaming(false);
           setActivity(null);
-          setTurnTick((n) => n + 1); // the agent finished a turn → the Files panel re-reads the folder
+          setTurnTick((n) => n + 1);
           finalizeAssistant();
           break;
         case "message_update": {
