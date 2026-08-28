@@ -343,7 +343,7 @@ function Launcher(props: {
           )}
           <div className="folder-actions">
             <button className="primary" onClick={props.onPick}>Open a folder to work in…</button>
-            <button className="cta-alt" onClick={props.onSelectGlobal}>New chat</button>
+            <button className="cta-alt" onClick={props.onSelectGlobal}>New chat (no folder)</button>
           </div>
           {props.recentFolders.length > 0 && (
             <>
