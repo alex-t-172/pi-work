@@ -165,7 +165,7 @@ export default function App() {
             folderName={b.globalMode ? "Global chat" : b.activeFolder ? basename(b.activeFolder) : "Session"}
             folderPath={b.globalMode ? undefined : b.activeFolder ?? undefined}
             connection={b.connection}
-            onBack={b.globalMode ? undefined : b.endToSessions}
+            onBack={b.globalMode ? b.endToGlobalSessions : b.endToSessions}
           />
           {b.dropped && b.connection !== "connected" && b.connection !== "starting" && (
             <div className="reconnect-banner">
@@ -232,6 +232,8 @@ export default function App() {
             />
             <Launcher
               recentFolders={b.recentFolders}
+              resume={b.resumeTarget}
+              onResume={b.resumeLast}
               folder={b.launcherFolder}
               global={b.launcherGlobal}
               sessions={b.launcherSessions}
@@ -300,6 +302,8 @@ function relTime(iso: string): string {
 
 function Launcher(props: {
   recentFolders: string[];
+  resume: { kind: "folder"; folder: string } | { kind: "global" } | null;
+  onResume: () => void;
   folder: string | null;
   global?: boolean;
   sessions: SessionMeta[] | null;
@@ -343,9 +347,21 @@ function Launcher(props: {
         <div className="launcher-body">
           <h2>Work locally, stay in control</h2>
           <p className="muted">Pick a folder for the agent to work in, or start a global chat with no file access.</p>
+          {props.resume && (
+            // One-click back into where you were — the sandbox closes on sleep and drops you
+            // here, and this saves the folder→session (or →global-chat) hop to get back in.
+            <button
+              className="resume-cta"
+              onClick={props.onResume}
+              title={props.resume.kind === "folder" ? props.resume.folder : "Global chat"}
+            >
+              <span className="resume-main">↩ Resume previous session</span>
+              <span className="resume-sub">{props.resume.kind === "folder" ? basename(props.resume.folder) : "Global chat (no folder)"}</span>
+            </button>
+          )}
           <div className="folder-actions">
             <button className="primary" onClick={props.onPick}>Open a folder to work in…</button>
-            <button className="cta-alt" onClick={props.onSelectGlobal}>New chat</button>
+            <button className="cta-alt" onClick={props.onSelectGlobal}>New chat (no folder)</button>
           </div>
           {props.recentFolders.length > 0 && (
             <>
@@ -872,7 +888,7 @@ function TopBar(props: {
         {props.folderName && <span className="ctx-label" title={props.folderPath}>{props.folderName}</span>}
         {props.connection && <span className={`conn-dot conn-dot-${props.connection}`} title={dotTitle} />}
         {props.onBack && (
-          <button className="ctx-back" onClick={props.onBack} title="Back to this folder's sessions">◀ End session</button>
+          <button className="ctx-back" onClick={props.onBack} title="End this session and go back to its list">◀ End session</button>
         )}
       </div>
       <div className="spacer" />
