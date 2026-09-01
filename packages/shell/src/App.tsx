@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { marked } from "marked";
 import { useBridge } from "./useBridge.ts";
 import { useTheme } from "./useTheme.ts";
@@ -66,6 +66,20 @@ export default function App() {
   // `dropped` keeps us in the session frame after an unexpected sandbox exit (so we can
   // reconnect in place rather than bouncing to home).
   const inSession = b.connection === "connected" || b.connection === "starting" || b.dropped;
+  // Connected, but no usable model: Pi's placeholder "unknown" model is normalized to null and
+  // the model list is empty. Gate on modelsReady so this only shows once we actually know, not
+  // during the connect gap. Drives the in-chat "connect a provider" prompt + a send guard.
+  const noProvider = b.connection === "connected" && b.modelsReady && !b.currentModel && b.models.length === 0;
+  // Block prompts (but not `!bash`, which needs no model) when there's no provider — open the
+  // Models panel instead of firing a request that fails with a raw "no API key" error.
+  const submit = b.submit;
+  const guardedSubmit = useCallback(
+    (text: string, mode: "auto" | "steer" | "followUp", attachments?: string[]) => {
+      if (noProvider && !text.trim().startsWith("!")) { setShowModelAccount(true); return; }
+      return submit(text, mode, attachments);
+    },
+    [noProvider, submit],
+  );
   const artifactCount = Object.keys(b.artifacts).length;
   const showArtifacts = inSession && b.artifactsOpen && (artifactCount > 0 || openFile !== null);
   const filesRoot = b.activeFolder;
@@ -179,6 +193,12 @@ export default function App() {
               <button className="primary" onClick={b.retryLastTurn}>⟳ Retry</button>
             </div>
           )}
+          {noProvider && (
+            <div className="setup-banner">
+              <span>Connect a provider to start chatting — sign in to Anthropic or another model, or add an API key.</span>
+              <button className="primary" onClick={() => setShowModelAccount(true)}>Connect a provider</button>
+            </div>
+          )}
           <StatusBar statuses={b.statuses} streaming={b.streaming} activity={b.activity} onAbort={b.abort} />
           <Widgets lines={b.widgets.above} placement="above" />
           <Chat
@@ -194,7 +214,7 @@ export default function App() {
             const q = b.queue.followUp.length + b.queue.steering.length;
             return q > 0 ? <div className="queue-note">{q} queued to send after this turn</div> : null;
           })()}
-          <Composer taRef={composerRef} streaming={b.streaming} disabled={b.connection !== "connected"} onSubmit={b.submit} commands={b.commands} injected={b.injectedText} canAttach={!b.globalMode && !!b.activeFolder} />
+          <Composer taRef={composerRef} streaming={b.streaming} disabled={b.connection !== "connected"} onSubmit={guardedSubmit} commands={b.commands} injected={b.injectedText} canAttach={!b.globalMode && !!b.activeFolder} />
         </div>
         {showArtifacts && (
           <ArtifactsPane
