@@ -131,6 +131,17 @@ button.secondary { background: transparent; }
 .elapsed { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 11px; }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
 
+/* Context-window meter: a slim fill bar + compact token count, pinned to the right of the
+   status bar. --ctx-color tracks fullness (accent → warn → error). */
+.ctx-meter { margin-left: auto; display: inline-flex; align-items: center; gap: 7px; cursor: default; }
+.ctx-meter-ok { --ctx-color: var(--accent); }
+.ctx-meter-warn { --ctx-color: var(--warn); }
+.ctx-meter-danger { --ctx-color: var(--error); }
+.ctx-meter-bar { width: 56px; height: 5px; border-radius: 999px; background: color-mix(in srgb, var(--ctx-color) 22%, transparent); overflow: hidden; }
+.ctx-meter-fill { display: block; height: 100%; border-radius: 999px; background: var(--ctx-color); transition: width 0.3s ease; }
+.ctx-meter-label { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 11px; white-space: nowrap; }
+.ctx-meter-danger .ctx-meter-label { color: var(--error); }
+
 .widgets { padding: 6px 12px; display: flex; flex-direction: column; gap: 8px; }
 .widget { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
 .widget-key { font-size: 11px; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }

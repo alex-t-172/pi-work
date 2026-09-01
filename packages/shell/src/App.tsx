@@ -5,7 +5,7 @@ import { useTheme } from "./useTheme.ts";
 import { useResources } from "./useResources.ts";
 import { useConnectors } from "./useConnectors.ts";
 import { FONT_OPTIONS, hasTweaks, PRESETS, resolveTheme, SIZE_MAX, SIZE_MIN, THEME_TOKENS } from "./theme.ts";
-import type { Activity, ChatItem, DirEntry, FileContent, LoginState, McpServer, McpStatusEntry, ResourceItem, ResourceList, SessionMeta, TreeNode, UiDialog } from "./types.ts";
+import type { Activity, ChatItem, ContextUsage, DirEntry, FileContent, LoginState, McpServer, McpStatusEntry, ResourceItem, ResourceList, SessionMeta, TreeNode, UiDialog } from "./types.ts";
 // Rail icons — real artwork instead of emoji (Vite bundles + hashes these).
 import fileIcon from "./assets/rail/file.png";
 import extensionsIcon from "./assets/rail/extensions.png";
@@ -199,7 +199,7 @@ export default function App() {
               <button className="primary" onClick={() => setShowModelAccount(true)}>Connect a provider</button>
             </div>
           )}
-          <StatusBar statuses={b.statuses} streaming={b.streaming} activity={b.activity} onAbort={b.abort} />
+          <StatusBar statuses={b.statuses} streaming={b.streaming} activity={b.activity} contextUsage={b.contextUsage} onAbort={b.abort} />
           <Widgets lines={b.widgets.above} placement="above" />
           <Chat
             items={b.items}
@@ -1003,9 +1003,9 @@ function Elapsed({ since }: { since: number }) {
   return <span className="elapsed">{m}:{String(s).padStart(2, "0")}</span>;
 }
 
-function StatusBar(props: { statuses: Record<string, string>; streaming: boolean; activity: Activity | null; onAbort: () => void }) {
+function StatusBar(props: { statuses: Record<string, string>; streaming: boolean; activity: Activity | null; contextUsage: ContextUsage | null; onAbort: () => void }) {
   const chips = Object.entries(props.statuses);
-  if (chips.length === 0 && !props.streaming) return null;
+  if (chips.length === 0 && !props.streaming && !props.contextUsage) return null;
   return (
     <div className="statusbar">
       {props.streaming && (
@@ -1021,7 +1021,34 @@ function StatusBar(props: { statuses: Record<string, string>; streaming: boolean
       {chips.map(([k, v]) => (
         <span key={k} className="chip">{v}</span>
       ))}
+      {props.contextUsage && <ContextMeter usage={props.contextUsage} />}
     </div>
+  );
+}
+
+// Compact token count: 980 · 4.2k · 128k. Keeps the meter legible without exact counts (those
+// live in the tooltip).
+function formatTokens(n: number): string {
+  if (n < 1000) return String(Math.round(n));
+  const k = n / 1000;
+  return `${k < 10 ? k.toFixed(1) : Math.round(k)}k`;
+}
+
+// How full the model's context window is — a slim meter that fills and shifts colour as the
+// conversation grows, pinned to the right of the status bar. Sits idle between turns (it reflects
+// the last turn's usage) and updates live while the model streams. Tooltip carries the breakdown.
+function ContextMeter({ usage }: { usage: ContextUsage }) {
+  const pct = usage.contextWindow > 0 ? Math.min(100, (usage.tokens / usage.contextWindow) * 100) : 0;
+  const level = pct >= 90 ? "danger" : pct >= 70 ? "warn" : "ok";
+  const title =
+    `Context: ${usage.tokens.toLocaleString()} / ${usage.contextWindow.toLocaleString()} tokens (${Math.round(pct)}%)` +
+    `\ninput ${usage.input.toLocaleString()} · output ${usage.output.toLocaleString()}` +
+    `\ncache read ${usage.cacheRead.toLocaleString()} · cache write ${usage.cacheWrite.toLocaleString()}`;
+  return (
+    <span className={`chip ctx-meter ctx-meter-${level}`} title={title}>
+      <span className="ctx-meter-bar"><span className="ctx-meter-fill" style={{ width: `${pct}%` }} /></span>
+      <span className="ctx-meter-label">{formatTokens(usage.tokens)} / {formatTokens(usage.contextWindow)}</span>
+    </span>
   );
 }
 

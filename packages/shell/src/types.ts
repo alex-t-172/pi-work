@@ -210,6 +210,17 @@ export interface ModelInfo {
   id: string;
   name?: string;
   reasoning?: boolean; // does the model support a thinking level
+  contextWindow?: number; // the model's context window in tokens (denominator for the usage meter)
+}
+
+/** How full the model's context window is, from the latest provider-reported usage. */
+export interface ContextUsage {
+  input: number; // uncached input tokens of the last request
+  output: number; // tokens the model generated
+  cacheRead: number; // input tokens served from the prompt cache
+  cacheWrite: number; // input tokens written to the prompt cache
+  tokens: number; // input + output + cacheRead + cacheWrite — what currently fills the window
+  contextWindow: number; // the model's window (the denominator)
 }
 
 export type Connection = "idle" | "starting" | "connected" | "exited" | "error";
