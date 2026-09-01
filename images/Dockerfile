@@ -8,8 +8,10 @@
 # resolve `@earendil-works/pi-coding-agent` by bare specifier from pi-host.
 FROM node:24-bookworm-slim
 
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends bash ca-certificates git ripgrep \
+# DEBIAN_FRONTEND=noninteractive: the build has no TTY, so debconf would otherwise emit
+# "unable to initialize frontend" noise as it falls back through Dialog → Readline → Teletype.
+RUN DEBIAN_FRONTEND=noninteractive apt-get update \
+  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends bash ca-certificates git ripgrep \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/pi-host

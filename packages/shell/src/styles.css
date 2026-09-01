@@ -106,6 +106,11 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; }
 .reconnect-banner { display: flex; align-items: center; gap: 12px; padding: 8px 12px; background: color-mix(in srgb, var(--warn) 16%, var(--bg2)); border-bottom: 1px solid var(--border); font-size: 13px; }
 .reconnect-banner span { flex: 1; min-width: 0; }
 
+/* Shown in-session when no model provider is connected yet — an inviting call to action
+   (accent-toned, not a warning) that points at the Models panel. */
+.setup-banner { display: flex; align-items: center; gap: 12px; padding: 8px 12px; background: color-mix(in srgb, var(--accent) 14%, var(--bg2)); border-bottom: 1px solid var(--border); font-size: 13px; }
+.setup-banner span { flex: 1; min-width: 0; }
+
 button {
   background: var(--panel); color: var(--fg); border: 1px solid var(--border);
   border-radius: 6px; padding: 6px 12px; cursor: pointer;

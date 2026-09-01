@@ -56,7 +56,10 @@ is to Claude Code.)
 - **A container runtime with a working `docker` command.** Docker Desktop, colima, Rancher
   Desktop, and OrbStack all work. If `docker` isn't on your `PATH` (Rancher's lives at
   `~/.rd/bin/docker`), set `PIWORK_DOCKER=/path/to/docker`. On a low-powered machine, colima and
-  OrbStack are lighter than Docker Desktop. Give the runtime's VM at least 2 GB.
+  OrbStack are lighter than Docker Desktop. Give the runtime's VM at least 2 GB. **It must be
+  running** before you build the image or open a session — nothing here starts it for you (open
+  Docker Desktop, or run `colima start`, once per boot). Piwork tells you if the daemon is down
+  when you start a session; `npm run image` just fails with a Docker connection error.
 - **~8 GB RAM and a few GB of free disk.** The model runs in the cloud, so Piwork stays light on
   your machine. The sandbox image is about 1.4 GB on disk. While running, the app uses around
   400 MB, plus 150 to 250 MB for each open session (every folder session runs in its own
@@ -70,9 +73,14 @@ is to Claude Code.)
 git clone https://github.com/alext-tessl/pi-work
 cd pi-work
 npm install        # workspaces: shell (React/Vite/Electron), pi-host, built-ins
-npm run image      # build the sandbox image (also runs the verify-pi check)
+# Start your container runtime before the next step — open Docker Desktop, or `colima start`.
+npm run image      # build the sandbox image (needs the daemon running; also runs verify-pi)
 npm run dev        # launch Vite + Electron with auto-reload
 ```
+
+The first `colima start` sizes its VM — `colima start --cpu 2 --memory 4` is comfortable for one
+session (the default 2 GB also works). It doesn't survive a reboot, so re-run `colima start` after
+one; `colima status` shows whether it's up.
 
 In the app, open a folder to start a session, or start the global chat. Then connect a model
 from the Models panel, for example by signing in to Anthropic. The first run seeds a fresh agent
@@ -169,6 +177,12 @@ Connectors are standard MCP servers listed in `mcp.json` and read by the bundled
 - **Where config lives.** Global connectors go in `~/.piwork/mcp-global/mcp.json` on the host,
   mounted into the container. Project connectors go in `<repo>/.pi/mcp.json`, so they travel with
   the repo.
+- **It also picks up a repo's existing `.mcp.json`.** Like skills, Piwork uses what the folder
+  already has: a `.mcp.json` at the repo root (the Claude/Cursor convention) is auto-discovered
+  too. Only **remote** servers from it work — a **stdio** server (one that launches a local
+  `command`) can't run inside the sandbox by design, so Piwork skips it silently rather than
+  erroring on every session start. Add local tools as remote MCP endpoints, or via a Piwork
+  connector, if you need them in a session.
 - **Sign-in.** Clicking Connect runs the auth flow in a short-lived container, separate from your
   chat. Your browser redirect lands on a small local server that finishes the flow. Tokens are
   stored in the container's agent store and refresh themselves.

@@ -10,7 +10,9 @@
  *     login_open_url    {url, instructions?}          (host opens a real browser)
  *     login_device_code {userCode, verificationUri, ...}
  *     login_progress    {message}
- *     login_prompt      {id, message, placeholder?, allowEmpty?}  (awaits login_input)
+ *     login_prompt      {id, message, placeholder?, allowEmpty?, promptKind?}  (awaits login_input)
+ *                       promptKind is "text" | "secret" | "manual_code"; the host suppresses the
+ *                       "manual_code" paste prompt when its seamless loopback callback is live.
  *     login_select      {id, message, options:[{id,label}]}       (awaits login_input)
  *     login_done        {provider}
  *     login_error       {message}
@@ -177,7 +179,9 @@ export async function runLogin(runtime: ModelRuntime, providerArg?: string): Pro
         prompt.type === "manual_code"
           ? "https://…/callback?code=…&state=…   (or the code)"
           : prompt.placeholder;
-      return ask({ type: "login_prompt", message, placeholder, allowEmpty: false });
+      // Tag the kind so the host can tell the manual redirect/code paste (the seamless-callback
+      // fallback) apart from a genuine text/secret prompt, and suppress only the former.
+      return ask({ type: "login_prompt", message, placeholder, allowEmpty: false, promptKind: prompt.type });
     },
   };
 

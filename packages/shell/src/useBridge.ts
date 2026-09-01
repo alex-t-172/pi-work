@@ -23,6 +23,13 @@ function usageField(u: Record<string, unknown> | undefined, ...keys: string[]): 
 const ANSI_RE = /\u001b\[[0-9;]*[A-Za-z]/g;
 const stripAnsi = (s: unknown): string => String(s ?? "").replace(ANSI_RE, "");
 
+// When no provider is signed in, Pi reports a placeholder model {id:"unknown",provider:"unknown"}
+// rather than nothing. Treat that as "no model" so the shell's not-connected UI (and the connect
+// prompt) engages instead of showing a phantom model called "unknown".
+function realModel(m: any): ModelInfo | null {
+  return m && m.id && m.id !== "unknown" && m.provider !== "unknown" ? (m as ModelInfo) : null;
+}
+
 // Mirrors piwork-ui's PIWORK_INTENT_SENTINEL. Extensions ride richer intents on `notify`
 // until they become first-class (once we own the shim). Kept in sync by convention.
 const PIWORK_INTENT_SENTINEL = "__piworkIntent__";
@@ -67,6 +74,9 @@ export function useBridge() {
   // How full the model's context window is, from the latest turn's provider-reported usage.
   // Null until the first usage-bearing message arrives (history alone doesn't carry token counts).
   const [contextUsage, setContextUsage] = useState<ContextUsage | null>(null);
+  // True once we've had a get_available_models reply, so "no provider connected" UI only shows
+  // when we actually know the list is empty — not during the connect gap before the reply lands.
+  const [modelsReady, setModelsReady] = useState(false);
   const [thinkingLevel, setThinkingLevelState] = useState<string>("medium");
   const [systemPrompt, setSystemPrompt] = useState<string | null>(null); // composed prompt (fetched on demand)
   const [stderrLog, setStderrLog] = useState<string[]>([]);
@@ -253,10 +263,10 @@ export function useBridge() {
         case "response":
           if (p.command === "get_commands" && p.success) setCommands(p.data?.commands ?? []);
           else if (p.command === "get_messages" && p.success) loadMessages(p.data?.messages ?? []);
-          else if (p.command === "get_available_models" && p.success) setModels(p.data?.models ?? []);
-          else if (p.command === "set_model" && p.success) setCurrentModel(p.data ?? null);
+          else if (p.command === "get_available_models" && p.success) { setModels(p.data?.models ?? []); setModelsReady(true); }
+          else if (p.command === "set_model" && p.success) setCurrentModel(realModel(p.data));
           else if (p.command === "get_state" && p.success) {
-            if (p.data?.model) setCurrentModel(p.data.model);
+            setCurrentModel(realModel(p.data?.model));
             if (p.data?.thinkingLevel) setThinkingLevelState(p.data.thinkingLevel);
             setStreaming(Boolean(p.data?.isStreaming));
             // On reconnect mid-stream we don't know the phase; show a generic working state.
@@ -273,7 +283,14 @@ export function useBridge() {
                 : it)));
             }
           } else if (p.success === false) {
-            pushToast(`${p.command} failed: ${p.error ?? "error"}`, "error");
+            const err = String(p.error ?? "error");
+            // The "no credentials" error is factual but ugly (container file paths). Rewrite it
+            // as a short, actionable message; the no-provider banner already points the way.
+            if (/no api key|use \/login|no model/i.test(err)) {
+              pushToast("No model connected — open Models to sign in to a provider or add an API key.", "error");
+            } else {
+              pushToast(`${p.command} failed: ${err}`, "error");
+            }
           }
           break;
 
@@ -597,6 +614,7 @@ export function useBridge() {
     setTreeOpen(false);
     setRewinding(false);
     setContextUsage(null);
+    setModelsReady(false); // re-learned from the new session's get_available_models reply
   }, []);
 
   const startWith = useCallback(async (folder: string, session?: string) => {
@@ -787,7 +805,7 @@ export function useBridge() {
   const closeLogin = useCallback(() => setLogin({ active: false }), []);
 
   return {
-    connection, hello, items, streaming, activity, statuses, widgets, dialog, toasts, models, currentModel, contextUsage, thinkingLevel, setThinkingLevel, stderrLog, debugLog, login,
+    connection, hello, items, streaming, activity, statuses, widgets, dialog, toasts, models, currentModel, contextUsage, modelsReady, thinkingLevel, setThinkingLevel, stderrLog, debugLog, login,
     recentFolders, resumeTarget, resumeLast, launcherFolder, launcherSessions, launcherGlobal, selectGlobal, activeFolder, globalMode, startGlobal,
     artifacts, artifactsOpen, setArtifactsOpen, lastArtifactKey, commands,
     sessionTree, treeOpen, setTreeOpen, openSessionTree, rewindTo, rewinding, injectedText,

@@ -1,0 +1,37 @@
+# Build-context hygiene. The sandbox image (images/Dockerfile) only copies specific
+# packages/pi-host and packages/piwork-* sources and installs its deps INSIDE the image,
+# so none of the below is needed — and shipping it (mostly node_modules) sent ~650 MB to
+# the Docker daemon on every build. Keep this in sync if the Dockerfile's COPY paths grow.
+
+# Dependencies (the image runs its own npm install)
+node_modules
+**/node_modules
+
+# Build output / caches
+dist
+**/dist
+*.tsbuildinfo
+
+# VCS, editor, OS cruft
+.git
+.gitignore
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+
+# Not copied by the Dockerfile
+packages/shell
+packages/bridge-protocol
+examples/
+design/
+docs/
+.claude/
+.github/
+
+# Ephemeral spike/smoke/delivery/probe workspaces
+.spike-tmp-*/
+.smoke-tmp-*/
+.deliv-tmp-*/
+.probe*/
