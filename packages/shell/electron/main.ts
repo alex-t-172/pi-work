@@ -241,10 +241,27 @@ function forward(channel: string, payload: unknown) {
   win?.webContents.send("piwork:message", { channel, payload });
 }
 
+// stdio MCP servers discovered in the workspace's configs. The sandbox can't run a local
+// command (that's the whole point of the sandbox), so any stdio server fails to connect at
+// session start — expected, not an error worth a red toast. Remote servers from the same
+// configs work fine and their failures stay loud. Recomputed per session (see startSessionFor).
+let sessionStdioServers = new Set<string>();
+// The adapter's eager-connect failure notify (pi-mcp-adapter init.ts): "MCP: Failed to connect
+// to <name>: <error>". We drop it only for known stdio servers.
+const STDIO_FAIL_RE = /^MCP: Failed to connect to (.+?):/;
+function isSuppressedStdioFailure(r: { method?: string; notifyType?: string; message?: unknown }): boolean {
+  if (r?.method !== "notify" || r?.notifyType !== "error") return false;
+  const msg = String(r.message ?? "").replace(/\x1b\[[0-9;]*[A-Za-z]/g, ""); // strip any ANSI first
+  const m = STDIO_FAIL_RE.exec(msg);
+  if (!m || !sessionStdioServers.has(m[1].trim())) return false;
+  log(`suppressed stdio MCP connect failure for "${m[1].trim()}" (stdio servers can't run in the sandbox)`);
+  return true;
+}
+
 function wireBridge(b: ContainerBridge) {
   b.on("hello", (h) => forward("hello", h));
   b.on("event", (e) => forward("event", e));
-  b.on("ui_request", (r) => forward("ui_request", r));
+  b.on("ui_request", (r) => { if (!isSuppressedStdioFailure(r)) forward("ui_request", r); });
   b.on("response", (r) => forward("response", r));
   b.on("stderr", (c) => forward("stderr", c));
   b.on("exit", (code) => forward("exit", { code }));
@@ -290,6 +307,10 @@ async function startSessionFor(workspace: string, session?: string, opts?: { glo
     const mount = agentMount();
     ensureStoreProvisioned(mount); // first-run: seed the built-in Suite into a fresh store
     lastAgent = { workspace, ...mount };
+    // Learn which discovered MCP servers are stdio, so their expected sandbox connect failures
+    // are quietly dropped rather than shown as errors (see isSuppressedStdioFailure).
+    sessionStdioServers = discoveredStdioServers(workspace);
+    if (sessionStdioServers.size) log(`stdio MCP servers (connect failures suppressed): ${[...sessionStdioServers].join(", ")}`);
     if (!opts?.global) addRecent(workspace); // global chat isn't a folder
     writeLastSession(opts?.global ? { kind: "global" } : { kind: "folder", folder: workspace });
     log(`starting ${opts?.global ? "GLOBAL " : ""}session: workspace=${workspace} session=${session ?? "new"} agentDir=${mount.agentHostDir ?? mount.agentVolume} suite=${DEV_SUITE_DIR ?? "(none)"}`);
@@ -820,6 +841,28 @@ function writeMcpServers(scope: "global" | "project", folder: string | undefined
   const file = mcpConfigPath(scope, folder);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify({ mcpServers }, null, 2));
+}
+
+// Names of stdio MCP servers across every config the adapter will discover for this workspace:
+// global (~/.piwork/mcp-global), the workspace's Piwork project file (.pi/mcp.json), and the
+// bare .mcp.json (the Claude/Cursor convention the adapter also auto-loads). A server is stdio if
+// it launches a command rather than pointing at a URL — those can't run in the sandbox.
+function discoveredStdioServers(workspace: string): Set<string> {
+  const names = new Set<string>();
+  const files = [
+    mcpConfigPath("global"),
+    path.join(workspace, ".pi", "mcp.json"),
+    path.join(workspace, ".mcp.json"),
+  ];
+  for (const f of files) {
+    try {
+      const map = (JSON.parse(fs.readFileSync(f, "utf8"))?.mcpServers ?? {}) as Record<string, any>;
+      for (const [name, def] of Object.entries(map)) {
+        if (def && (def.type === "stdio" || (def.command && !def.url))) names.add(name);
+      }
+    } catch { /* missing or invalid file → nothing to add */ }
+  }
+  return names;
 }
 
 ipcMain.handle("piwork:getMcpServers", (_e, scope: "global" | "project", folder?: string) => readMcpServers(scope, folder));

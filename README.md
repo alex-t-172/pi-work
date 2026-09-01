@@ -169,6 +169,12 @@ Connectors are standard MCP servers listed in `mcp.json` and read by the bundled
 - **Where config lives.** Global connectors go in `~/.piwork/mcp-global/mcp.json` on the host,
   mounted into the container. Project connectors go in `<repo>/.pi/mcp.json`, so they travel with
   the repo.
+- **It also picks up a repo's existing `.mcp.json`.** Like skills, Piwork uses what the folder
+  already has: a `.mcp.json` at the repo root (the Claude/Cursor convention) is auto-discovered
+  too. Only **remote** servers from it work — a **stdio** server (one that launches a local
+  `command`) can't run inside the sandbox by design, so Piwork skips it silently rather than
+  erroring on every session start. Add local tools as remote MCP endpoints, or via a Piwork
+  connector, if you need them in a session.
 - **Sign-in.** Clicking Connect runs the auth flow in a short-lived container, separate from your
   chat. Your browser redirect lands on a small local server that finishes the flow. Tokens are
   stored in the container's agent store and refresh themselves.
