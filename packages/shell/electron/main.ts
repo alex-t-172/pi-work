@@ -1004,13 +1004,33 @@ function portFree(port: number): Promise<boolean> {
     srv.listen(port, "127.0.0.1");
   });
 }
+// Ports actually published to the current login container. The seamless loopback callback is
+// live only for a provider whose redirect port is in here — used to suppress the redundant
+// manual-paste prompt (see handleLoginEvent), while non-published ports keep the paste fallback.
+let loginPublishedPorts = new Set<number>();
+// Set once we see the login's auth URL redirect to a published port: Pi's own callback server
+// will catch the browser redirect, so the manual paste it also asks for is redundant.
+let loginSeamless = false;
 async function oauthPortPublishArgs(): Promise<string[]> {
   const args: string[] = [];
+  loginPublishedPorts = new Set();
   for (const p of OAUTH_CALLBACK_PORTS) {
-    if (await portFree(p)) args.push("-p", `127.0.0.1:${p}:${p}`);
+    if (await portFree(p)) { args.push("-p", `127.0.0.1:${p}:${p}`); loginPublishedPorts.add(p); }
     else log(`login: host port ${p} busy — its provider falls back to manual paste`);
   }
   return args;
+}
+// The loopback port from an OAuth authorize URL's redirect_uri (e.g. …&redirect_uri=http://
+// localhost:53692/callback → 53692), or null if it isn't a localhost redirect we can catch.
+function redirectPortOf(authUrl: string): number | null {
+  try {
+    const redirect = new URL(authUrl).searchParams.get("redirect_uri");
+    if (!redirect) return null;
+    const u = new URL(redirect);
+    if (u.hostname !== "localhost" && u.hostname !== "127.0.0.1") return null;
+    const port = Number(u.port);
+    return Number.isInteger(port) && port > 0 ? port : null;
+  } catch { return null; }
 }
 // Bring Piwork to the front — after the browser sign-in completes, or when a manual paste is
 // needed — so the user isn't stranded in the browser wondering what to do next.
@@ -1031,6 +1051,7 @@ ipcMain.handle("piwork:startLogin", async (_e, provider?: string) => {
     loginBridge.on("error", (err) => forward("login", { type: "login_error", message: err.message }));
     loginBridge.on("exit", (code) => log(`[login] container exit ${code}`));
     loginBridge.on("event", (e) => handleLoginEvent(e));
+    loginSeamless = false;
     const portArgs = await oauthPortPublishArgs();
     log(`starting login container${provider ? ` provider=${provider}` : ""}; published ${portArgs.length / 2} callback port(s)`);
     loginBridge.start({
@@ -1051,12 +1072,31 @@ ipcMain.handle("piwork:startLogin", async (_e, provider?: string) => {
 
 function handleLoginEvent(e: Record<string, any>) {
   // Open login/verification URLs in the user's real browser.
-  if (e.type === "login_open_url" && typeof e.url === "string") void shell.openExternal(e.url);
+  if (e.type === "login_open_url" && typeof e.url === "string") {
+    void shell.openExternal(e.url);
+    // If the redirect targets a port we published, Pi's own callback server catches the
+    // browser redirect and completes the exchange — so the manual paste it also asks for is
+    // redundant. Mark this login seamless so we suppress that prompt below.
+    const port = redirectPortOf(e.url);
+    if (port != null && loginPublishedPorts.has(port)) {
+      loginSeamless = true;
+      log(`login: seamless callback active on port ${port} — suppressing manual-paste fallback`);
+    }
+  }
   if (e.type === "login_device_code" && typeof e.verificationUri === "string") void shell.openExternal(e.verificationUri);
+  // The manual redirect/code paste is only a fallback for when the seamless loopback callback
+  // can't run. When it IS running, drop that prompt (the "horrible box") and just show progress —
+  // Pi finishes from the browser redirect. Genuine text/secret prompts are never suppressed.
+  if (e.type === "login_prompt" && e.promptKind === "manual_code" && loginSeamless) {
+    log("login: dropped redundant manual_code prompt (seamless callback handles it)");
+    forward("login", { type: "login_progress", message: "Complete the sign-in in your browser — Piwork will finish automatically." });
+    return;
+  }
   // Pull Piwork back to the front when the browser hand-off is done (seamless callback) or
   // when the user needs to paste something (fallback) — so they're never stranded.
   if (e.type === "login_done" || e.type === "login_prompt" || e.type === "login_select") focusWindow();
   forward("login", e);
+  if (e.type === "login_done" || e.type === "login_error") loginSeamless = false;
   if (e.type === "login_done") {
     log("login done → restarting session to pick up new credentials");
     void (async () => {
