@@ -210,6 +210,10 @@ function createWindow() {
     },
   });
   hardenNavigation(win.webContents);
+  // Drop the reference when the OS window is gone, so every `win?.` guard (forward, focusWindow)
+  // short-circuits instead of touching a destroyed object. On macOS the app keeps running after
+  // the window closes, so this ref would otherwise dangle.
+  win.on("closed", () => { win = undefined; });
   if (DEV_URL) win.loadURL(DEV_URL);
   else win.loadFile(path.join(dir, "..", "renderer", "index.html"));
 }
@@ -238,7 +242,12 @@ function hardenNavigation(wc: import("electron").WebContents): void {
 
 function forward(channel: string, payload: unknown) {
   log(`→ ${summarize(channel, payload)}`);
-  win?.webContents.send("piwork:message", { channel, payload });
+  // Guard against the teardown race: on quit the window (and its webContents) can be destroyed
+  // before a late bridge event (e.g. the container's "exit") reaches here. `win?.` only catches
+  // undefined, not a destroyed object — sending to that throws "Object has been destroyed".
+  if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) {
+    win.webContents.send("piwork:message", { channel, payload });
+  }
 }
 
 function wireBridge(b: ContainerBridge) {
