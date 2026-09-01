@@ -1,5 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Activity, ChatItem, Connection, LoginState, McpStatusEntry, ModelInfo, SessionMeta, Toast, TreeNode, UiDialog } from "./types.ts";
+import type { Activity, ChatItem, Connection, ContextUsage, LoginState, McpStatusEntry, ModelInfo, SessionMeta, Toast, TreeNode, UiDialog } from "./types.ts";
+
+// Denominator for the context meter when a model doesn't report its window (matches the
+// default Piwork gives custom Anthropic-style models in the shell — see electron/main.ts).
+const DEFAULT_CONTEXT_WINDOW = 200000;
+
+// Pull a token count off Pi's provider-reported `usage` object, tolerating both Pi's native
+// names (input/output/cacheRead/cacheWrite) and Anthropic-style ones, so the meter survives a
+// provider that labels its fields differently.
+function usageField(u: Record<string, unknown> | undefined, ...keys: string[]): number {
+  for (const k of keys) {
+    const v = Number(u?.[k]);
+    if (Number.isFinite(v) && v > 0) return v;
+  }
+  return 0;
+}
 
 // Extensions written for Pi's terminal UI (e.g. pi-mcp-adapter) color their status/widget/
 // notify text with ANSI escape codes. Pi's TUI renders them; our GUI would show the raw codes
@@ -49,6 +64,9 @@ export function useBridge() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [currentModel, setCurrentModel] = useState<ModelInfo | null>(null);
+  // How full the model's context window is, from the latest turn's provider-reported usage.
+  // Null until the first usage-bearing message arrives (history alone doesn't carry token counts).
+  const [contextUsage, setContextUsage] = useState<ContextUsage | null>(null);
   const [thinkingLevel, setThinkingLevelState] = useState<string>("medium");
   const [systemPrompt, setSystemPrompt] = useState<string | null>(null); // composed prompt (fetched on demand)
   const [stderrLog, setStderrLog] = useState<string[]>([]);
@@ -105,8 +123,41 @@ export function useBridge() {
   const rewindInFlight = useRef(false); // a rewind was requested, awaiting the fresh tree (= success)
   const pendingPrefill = useRef<string | null>(null);
   const streamingRef = useRef(false);
+  // The event subscription is mounted once, so its closure can't see fresh model state. Keep the
+  // current model + model list in refs so the usage handler can resolve the right context window.
+  const currentModelRef = useRef<ModelInfo | null>(null);
+  const modelsRef = useRef<ModelInfo[]>([]);
 
   useEffect(() => { streamingRef.current = streaming; }, [streaming]);
+  useEffect(() => { currentModelRef.current = currentModel; }, [currentModel]);
+  useEffect(() => { modelsRef.current = models; }, [models]);
+
+  // The context window for the active model: its own reported window, else the matching entry in
+  // the model list (set_model's payload can omit it), else a sane default.
+  const resolveContextWindow = useCallback((): number => {
+    const cur = currentModelRef.current;
+    if (cur?.contextWindow && cur.contextWindow > 0) return cur.contextWindow;
+    const match = modelsRef.current.find((m) => m.provider === cur?.provider && m.id === cur?.id);
+    if (match?.contextWindow && match.contextWindow > 0) return match.contextWindow;
+    return DEFAULT_CONTEXT_WINDOW;
+  }, []);
+
+  // Fold a provider-reported usage object into the context meter. Context "used" is everything
+  // that fills the window: uncached + cached input plus the model's own output (which becomes
+  // history for the next turn). Ignore an all-zero report (some providers only bill at completion).
+  const applyUsage = useCallback((u: unknown) => {
+    if (!u || typeof u !== "object") return;
+    const usage = u as Record<string, unknown>;
+    const input = usageField(usage, "input", "inputTokens");
+    const output = usageField(usage, "output", "outputTokens");
+    const cacheRead = usageField(usage, "cacheRead", "cacheReadInputTokens", "cache_read_input_tokens");
+    const cacheWrite = usageField(usage, "cacheWrite", "cacheCreationInputTokens", "cache_creation_input_tokens");
+    const tokens = input + output + cacheRead + cacheWrite;
+    if (tokens <= 0) return;
+    setContextUsage({ input, output, cacheRead, cacheWrite, tokens, contextWindow: resolveContextWindow() });
+  }, [resolveContextWindow]);
+  const applyUsageRef = useRef(applyUsage);
+  applyUsageRef.current = applyUsage;
 
   const pushToast = useCallback((message: string, level: Toast["level"]) => {
     const id = nextId();
@@ -156,6 +207,9 @@ export function useBridge() {
     // Replace unconditionally — a rewind to before an early human message truncates the
     // conversation to (possibly) empty, and the chat must reflect that, not keep stale messages.
     setItems(items);
+    // History carries no token counts, and a rewind changes how full the window is, so drop the
+    // stale meter — the next turn's usage repopulates it.
+    setContextUsage(null);
   }, []);
 
   useEffect(() => {
@@ -252,6 +306,8 @@ export function useBridge() {
           setActivity({ phase: "working", since: Date.now() });
           break;
         case "message_end":
+          // The final message can carry the authoritative usage even when the deltas didn't.
+          if (p.message?.usage) applyUsageRef.current(p.message.usage);
           // Close the current assistant bubble at each message boundary. A single turn
           // can contain several assistant messages (text → tool → text); without this
           // they merge into one bubble and run together ("…end.Start of next…").
@@ -297,6 +353,9 @@ export function useBridge() {
           if (typeof p.level === "string") setThinkingLevelState(p.level);
           break;
         case "message_update": {
+          // Top-level cumulative usage for the streaming message — the freshest read on how full
+          // the context window is (its input already spans the whole conversation).
+          if (p.usage) applyUsageRef.current(p.usage);
           const ev = p.assistantMessageEvent;
           if (!ev) break;
           if (ev.type === "text_delta") {
@@ -537,6 +596,7 @@ export function useBridge() {
     setSessionTree(null);
     setTreeOpen(false);
     setRewinding(false);
+    setContextUsage(null);
   }, []);
 
   const startWith = useCallback(async (folder: string, session?: string) => {
@@ -727,7 +787,7 @@ export function useBridge() {
   const closeLogin = useCallback(() => setLogin({ active: false }), []);
 
   return {
-    connection, hello, items, streaming, activity, statuses, widgets, dialog, toasts, models, currentModel, thinkingLevel, setThinkingLevel, stderrLog, debugLog, login,
+    connection, hello, items, streaming, activity, statuses, widgets, dialog, toasts, models, currentModel, contextUsage, thinkingLevel, setThinkingLevel, stderrLog, debugLog, login,
     recentFolders, resumeTarget, resumeLast, launcherFolder, launcherSessions, launcherGlobal, selectGlobal, activeFolder, globalMode, startGlobal,
     artifacts, artifactsOpen, setArtifactsOpen, lastArtifactKey, commands,
     sessionTree, treeOpen, setTreeOpen, openSessionTree, rewindTo, rewinding, injectedText,
