@@ -39,12 +39,16 @@ is to Claude Code.)
   one click; Slack needs a Slack app you register first. You can also add any other MCP server.
   This runs on the bundled [`pi-mcp-adapter`](https://pi.dev/packages/pi-mcp-adapter).
 - **Web search, built in.** Pi ships no web search, so Piwork adds `web_search` and `fetch_url`
-  that work with no setup (keyless DuckDuckGo). Add a free Brave Search API key in Customise for
-  more reliable results.
-- **Built-in extensions.** A handful ship by default, each removable in Customise: ask-the-user
-  dialogs, a file and HTML viewer tool, a task list the agent keeps, web search, and subagents
-  (`pi-subagents`). They live in [`packages/piwork-*`](packages), listed in
-  [`built-ins.json`](packages/pi-host/built-ins.json).
+  that work with no setup (keyless, via Bing then DuckDuckGo). Keyless works but isn't great — it's
+  rate-limited and lower quality — so **adding a free Brave Search API key in Customise is
+  recommended**; it makes web search markedly more reliable.
+- **Built-in tools, installed by default.** A handful of extensions are installed into a fresh
+  agent store automatically (each removable any time in Customise): ask-the-user dialogs, a file
+  and HTML viewer, a task list the agent keeps, and web search (`web_search` + `fetch_url`). They
+  register ordinary agent tools — **not** MCP servers — and live in
+  [`packages/piwork-*`](packages), listed in [`built-ins.json`](packages/pi-host/built-ins.json).
+  Subagents (`pi-subagents`) ships baked too but is opt-in — install it in Customise when you want
+  delegation.
 - **Extend it from inside.** Ask Piwork to write a new command, tool, panel, or file renderer,
   and load it live, for one project or everywhere. There's a reference extension in
   [`examples/`](examples).
@@ -84,7 +88,11 @@ one; `colima status` shows whether it's up.
 
 In the app, open a folder to start a session, or start the global chat. Then connect a model
 from the Models panel, for example by signing in to Anthropic. The first run seeds a fresh agent
-store with the built-in extensions, so there's nothing to install.
+store with the built-in extensions, so there's nothing to install — web search, the viewer, the
+task list, and ask-the-user dialogs are ready in every session (folder or global chat). Web
+search works keyless out of the box; add a free Brave Search API key in **Customise → Extensions**
+for more reliable results. Use Customise to add or remove extensions and skills, and Connectors to
+add MCP servers.
 
 While the agent is replying, **Enter** steers, **Alt+Enter** queues a follow-up, and
 **Shift+Enter** adds a newline. The left rail has Files, Customise, Connectors, Models, Rewind,
