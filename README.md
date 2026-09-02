@@ -39,8 +39,9 @@ is to Claude Code.)
   one click; Slack needs a Slack app you register first. You can also add any other MCP server.
   This runs on the bundled [`pi-mcp-adapter`](https://pi.dev/packages/pi-mcp-adapter).
 - **Web search, built in.** Pi ships no web search, so Piwork adds `web_search` and `fetch_url`
-  that work with no setup (keyless DuckDuckGo). Add a free Brave Search API key in Customise for
-  more reliable results.
+  that work with no setup (keyless, via Bing then DuckDuckGo). Keyless works but isn't great — it's
+  rate-limited and lower quality — so **adding a free Brave Search API key in Customise is
+  recommended**; it makes web search markedly more reliable.
 - **Built-in tools, installed by default.** A handful of extensions are installed into a fresh
   agent store automatically (each removable any time in Customise): ask-the-user dialogs, a file
   and HTML viewer, a task list the agent keeps, and web search (`web_search` + `fetch_url`). They
