@@ -11,11 +11,11 @@ Most of Piwork's features are Pi extensions rather than app code, so you can add
 the agent to write one for you. (If you know Claude's tools: Piwork is to Cowork roughly what Pi
 is to Claude Code.)
 
-> **Status:** early, and a personal project written mostly with an AI coding agent. It still
-> takes the engineering seriously where it counts: a pinned-SDK contract check gates every image
-> build, CI runs the checks, and the [security model](SECURITY.md) is stated plainly. It runs as
-> a dev build for now — clone the repo, build the sandbox image, run the app; a packaged,
-> downloadable version comes later. macOS first.
+> **Status:** early — a dev build, but public and ready for anyone to try. Written mostly with an
+> AI coding agent, it still takes the engineering seriously where it counts: a pinned-SDK contract
+> check gates every image build, CI runs the checks, and the [security model](SECURITY.md) is
+> stated plainly. You run it from source for now — clone the repo, build the sandbox image, run the
+> app; a packaged, downloadable version comes later. macOS first.
 
 ## What it does
 
