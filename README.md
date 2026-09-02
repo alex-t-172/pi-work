@@ -1,6 +1,6 @@
 # Piwork
 
-[![CI](https://github.com/alext-tessl/pi-work/actions/workflows/ci.yml/badge.svg)](https://github.com/alext-tessl/pi-work/actions/workflows/ci.yml)
+[![CI](https://github.com/alex-t-172/pi-work/actions/workflows/ci.yml/badge.svg)](https://github.com/alex-t-172/pi-work/actions/workflows/ci.yml)
 
 Piwork is a desktop app for the [Pi coding agent](https://pi.dev). You open a folder and an
 agent works inside it, in a sandbox: it can read and change files in that folder, but nothing
@@ -74,7 +74,7 @@ is to Claude Code.)
 ## Quick start (dev build)
 
 ```bash
-git clone https://github.com/alext-tessl/pi-work
+git clone https://github.com/alex-t-172/pi-work
 cd pi-work
 npm install        # workspaces: shell (React/Vite/Electron), pi-host, built-ins
 # Start your container runtime before the next step — open Docker Desktop, or `colima start`.
@@ -90,9 +90,9 @@ In the app, open a folder to start a session, or start the global chat. Then con
 from the Models panel, for example by signing in to Anthropic. The first run seeds a fresh agent
 store with the built-in extensions, so there's nothing to install — web search, the viewer, the
 task list, and ask-the-user dialogs are ready in every session (folder or global chat). Web
-search works keyless out of the box; add a free Brave Search API key in **Customise → Extensions**
-for more reliable results. Use Customise to add or remove extensions and skills, and Connectors to
-add MCP servers.
+search works keyless out of the box, but a free Brave Search API key (**Customise → Extensions**)
+is recommended — keyless is rate-limited and lower quality. Use Customise to add or remove
+extensions and skills, and Connectors to add MCP servers.
 
 While the agent is replying, **Enter** steers, **Alt+Enter** queues a follow-up, and
 **Shift+Enter** adds a newline. The left rail has Files, Customise, Connectors, Models, Rewind,
@@ -149,11 +149,12 @@ images/Dockerfile    node:24 + git + ripgrep + pinned Pi SDK + pi-mcp-adapter + 
                      + baked built-in extensions + skills
 ```
 
-The `piwork-*` packages plus `pi-subagents` are the built-in extensions. They're baked into the
-image and installed into a fresh store by default, and each is removable in Customise. Baking
-puts the code in the image; the store's `settings.json` decides what's turned on. To add a
-built-in, add an entry to [`built-ins.json`](packages/pi-host/built-ins.json) and a bake step to
-the Dockerfile. The `verify:builtins` check catches mistakes.
+The `piwork-*` packages are the built-in extensions: baked into the image and installed into a
+fresh store by default (each removable in Customise). `pi-subagents` is baked too but is opt-in —
+install it in Customise when you want delegation. Baking puts the code in the image; the store's
+`settings.json` decides what's turned on. To add a default built-in, add an entry to
+[`built-ins.json`](packages/pi-host/built-ins.json) and a bake step to the Dockerfile. The
+`verify:builtins` check catches mistakes.
 
 ## Extending Piwork from the app
 

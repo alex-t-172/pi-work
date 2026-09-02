@@ -25,7 +25,7 @@ architecture.
 ## Setup
 
 ```bash
-git clone https://github.com/alext-tessl/pi-work
+git clone https://github.com/alex-t-172/pi-work
 cd pi-work
 npm install            # installs workspaces (shell / pi-host / bridge-protocol / built-ins)
 npm run image          # docker build -t piwork-sandbox:spike -f images/Dockerfile .
