@@ -467,7 +467,11 @@ function writeAgentText(mount: { agentHostDir?: string; agentVolume?: string }, 
     fs.writeFileSync(path.join(mount.agentHostDir, name), data);
     return { ok: true };
   }
-  const r = spawnSync(DOCKER, ["run", "--rm", "-v", `${mount.agentVolume}:/a`, "--entrypoint", "node", IMAGE, "-e", `require('fs').writeFileSync('/a/${name}',process.env.PW)`], { encoding: "utf8", env: { ...process.env, PW: data } });
+  // Pass the payload through the PW env var — but it MUST be forwarded into the container with an
+  // explicit `-e PW`. Setting it only in spawnSync's env reaches the docker CLI, not the container,
+  // so process.env.PW was undefined inside and writeFileSync silently threw (every named-volume
+  // write failed — auto-provisioning, addModel, writeInstructions — while agentHostDir dev mode hid it).
+  const r = spawnSync(DOCKER, ["run", "--rm", "-v", `${mount.agentVolume}:/a`, "-e", "PW", "--entrypoint", "node", IMAGE, "-e", `require('fs').writeFileSync('/a/${name}',process.env.PW)`], { encoding: "utf8", env: { ...process.env, PW: data } });
   return r.status === 0 ? { ok: true } : { ok: false, error: `write failed: ${r.stderr || r.status}` };
 }
 function readModelsJson(mount: { agentHostDir?: string; agentVolume?: string }): Record<string, any> {
@@ -513,8 +517,11 @@ function ensureStoreProvisioned(mount: { agentHostDir?: string; agentVolume?: st
 
     if (!hasPackages) {
       settings.packages = DEFAULT_BUILTINS.map((b) => b.source);
+      // Only record the built-ins as seeded if the write actually lands — otherwise bail without
+      // setting storeProvisioned, so a failed write retries next launch instead of being masked.
+      const w = writeAgentText(mount, "settings.json", JSON.stringify(settings, null, 2));
+      if (!w.ok) { log(`store provisioning failed to write settings.json (${w.error}); will retry next launch`); return; }
       DEFAULT_BUILTINS.forEach((b) => seeded.add(b.name));
-      writeAgentText(mount, "settings.json", JSON.stringify(settings, null, 2));
       log("provisioned uncurated agent store with the built-in extensions");
     } else if (!hadSeededSet) {
       // A store the user has already curated (it has a packages array), seen for the first time:
@@ -530,7 +537,8 @@ function ensureStoreProvisioned(mount: { agentHostDir?: string; agentVolume?: st
         if (!pkgs.includes(b.source)) { pkgs.push(b.source); added.push(b.name); }
       }
       if (added.length) {
-        writeAgentText(mount, "settings.json", JSON.stringify(settings, null, 2));
+        const w = writeAgentText(mount, "settings.json", JSON.stringify(settings, null, 2));
+        if (!w.ok) { log(`store merge failed to write settings.json (${w.error}); will retry next launch`); return; }
         log(`added new built-ins to existing store: ${added.join(", ")}`);
       }
     }
