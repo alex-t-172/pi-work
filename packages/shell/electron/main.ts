@@ -486,9 +486,10 @@ let storeProvisioned = false;
 //
 // A `seededBuiltins` set (host config) records every default we've offered. A default is added to
 // the store only the first time it appears (its name isn't in the set yet); after that it's the
-// user's to keep or remove in Customise, and removal sticks. Cases:
-//   - Fresh store (no settings.json): seed all current defaults.
-//   - Existing store, first run of this logic (no seeded set yet): grandfather — record the
+// user's to keep or remove in Customise, and removal sticks. Cases (keyed on the store's
+// `packages` array, which only we write — NOT on settings.json existence, which Pi creates):
+//   - Uncurated store (no packages array yet): install all current defaults.
+//   - Curated store, first run of this logic (no seeded set yet): grandfather — record the
 //     current defaults as seeded WITHOUT adding, since we can't tell a deliberate removal from a
 //     never-had. Only genuinely NEW built-ins (added later) get merged in.
 // Runs once per app launch.
@@ -500,17 +501,28 @@ function ensureStoreProvisioned(mount: { agentHostDir?: string; agentVolume?: st
     const hadSeededSet = cfg.seededBuiltins !== undefined;
     const existing = readAgentText(mount, "settings.json").trim();
 
-    if (!existing) {
-      writeAgentText(mount, "settings.json", JSON.stringify({ packages: DEFAULT_BUILTINS.map((b) => b.source) }, null, 2));
+    // "Fresh" is decided by whether the store has a `packages` array yet — NOT by whether
+    // settings.json exists. Pi writes model defaults (defaultProvider/defaultModel) into
+    // settings.json the moment a model is used, so keying off file-existence misclassified a
+    // brand-new store as pre-existing and seeded the built-ins WITHOUT installing them (they'd
+    // show as "Install" in Customise, never active). `packages` is written only by us, so its
+    // absence is the reliable "uncurated store" signal. Every write preserves the model defaults.
+    let settings: { packages?: string[] } & Record<string, unknown> = {};
+    try { settings = existing ? JSON.parse(existing) : {}; } catch { settings = {}; }
+    const hasPackages = Array.isArray(settings.packages);
+
+    if (!hasPackages) {
+      settings.packages = DEFAULT_BUILTINS.map((b) => b.source);
       DEFAULT_BUILTINS.forEach((b) => seeded.add(b.name));
-      log("provisioned fresh agent store with the built-in extensions");
+      writeAgentText(mount, "settings.json", JSON.stringify(settings, null, 2));
+      log("provisioned uncurated agent store with the built-in extensions");
     } else if (!hadSeededSet) {
-      // Grandfather an existing store: mark current defaults seen, don't touch its packages.
+      // A store the user has already curated (it has a packages array), seen for the first time:
+      // mark the defaults seen without touching packages — we can't tell a removal from a never-had.
       DEFAULT_BUILTINS.forEach((b) => seeded.add(b.name));
-      log("existing store: recorded current built-ins as seeded (no changes)");
+      log("existing curated store: recorded current built-ins as seeded (no changes)");
     } else {
-      const settings = JSON.parse(existing) as { packages?: string[] };
-      const pkgs = Array.isArray(settings.packages) ? settings.packages : [];
+      const pkgs = settings.packages as string[];
       const added: string[] = [];
       for (const b of DEFAULT_BUILTINS) {
         if (seeded.has(b.name)) continue; // already offered → user's call to keep/remove
@@ -518,7 +530,6 @@ function ensureStoreProvisioned(mount: { agentHostDir?: string; agentVolume?: st
         if (!pkgs.includes(b.source)) { pkgs.push(b.source); added.push(b.name); }
       }
       if (added.length) {
-        settings.packages = pkgs;
         writeAgentText(mount, "settings.json", JSON.stringify(settings, null, 2));
         log(`added new built-ins to existing store: ${added.join(", ")}`);
       }
