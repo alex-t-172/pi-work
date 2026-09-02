@@ -24,7 +24,7 @@
   "author": "Alex Thoma",
   "repository": {
     "type": "git",
-    "url": "https://github.com/alext-tessl/pi-work"
+    "url": "https://github.com/alex-t-172/pi-work"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
