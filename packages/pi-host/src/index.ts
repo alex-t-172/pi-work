@@ -182,12 +182,25 @@ if (!piworkGlobal.__piwork) {
 // Piwork's default system-prompt layer — APPENDED (never replaces) to Pi's base, so we keep
 // Pi's carefully-tuned base + its updates, and user AGENTS.md/append/replace layer on top.
 // Facts only (environment + boundaries); no persona/behaviour tuning. Visible in the prompt viewer.
+// How tools reach the model in Piwork — appended to both env layers. Written to correct a
+// common failure mode: the model treats MCP as the gateway to capabilities and hunts through it
+// for something (e.g. web search) that is already a plain tool in its list. Facts only.
+const PIWORK_TOOLS = `How your tools work here: every tool in your current tool list is directly callable — MCP is only ONE source of tools, not a gateway you go through to reach the others. Tools reach you from three places:
+- Piwork's built-in extensions register ordinary tools (e.g. web search and page fetch, a file/HTML viewer, a task list). These are installed by default and appear in your tool list like any other tool — they are NOT MCP servers.
+- Extensions the user installs — globally (every session) or per-project — can register more tools the same way. Skills add instructions, not tools.
+- MCP connectors add tools from remote/local MCP servers. Only these are "MCP"; most Piwork tools are not.
+So if a capability is already a tool in your list — web search, for instance — just call it directly; never go looking through MCP for it. If a capability you expected is missing, its extension or connector simply isn't installed in this session (extensions and skills can be global or project-scoped) — say so and, if useful, tell the user they can add it in Customise.`;
+
 const PIWORK_ENV_FOLDER = `You are running inside Piwork, a desktop app that puts pi behind a graphical chat rather than a terminal. A few facts about this environment:
 
 - You work in a sandboxed container. Your working directory /workspace is a folder on the user's own machine that they chose to open, so the files you read and change there are their real files — but you cannot access anything outside /workspace.
 - Files the user attaches in the chat are copied into .attachments/ in the workspace.
-- The user reads your replies in a graphical app, not a terminal, so don't rely on keystroke- or TUI-only instructions.`;
-const PIWORK_ENV_GLOBAL = `You are running inside Piwork, a desktop app for pi. This is a folderless global chat: you have no file access here, but you can help the user set up and customise Piwork itself — its global skills, commands, and tools.`;
+- The user reads your replies in a graphical app, not a terminal, so don't rely on keystroke- or TUI-only instructions.
+
+${PIWORK_TOOLS}`;
+const PIWORK_ENV_GLOBAL = `You are running inside Piwork, a desktop app for pi. This is a folderless global chat: you have no file access here, but you can help the user set up and customise Piwork itself — its global skills, commands, and tools.
+
+${PIWORK_TOOLS}`;
 
 // Always-on base extension: gives every session a /piwork-reload command so newly
 // authored/installed extensions, skills and connectors go live WITHOUT ending the
